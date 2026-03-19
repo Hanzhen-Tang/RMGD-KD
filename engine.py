@@ -1,0 +1,190 @@
+import time
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+import util
+from losses import RegressionDistillationLoss
+
+
+def prepare_batch(x, y, device):
+    """把 numpy batch 转成模型需要的输入格式。"""
+    inputs = torch.as_tensor(x, dtype=torch.float32, device=device).transpose(1, 3)
+    targets = torch.as_tensor(y, dtype=torch.float32, device=device).transpose(1, 3)
+    # 仅预测第 0 个通道，对齐原始交通预测任务设定。
+    targets = targets[:, 0, :, :]
+    return inputs, targets
+
+
+def count_parameters(model):
+    """统计可训练参数量。"""
+    return sum(param.numel() for param in model.parameters() if param.requires_grad)
+
+
+class TeacherTrainer:
+    """教师模型训练器。"""
+
+    def __init__(self, model, scaler, learning_rate, weight_decay, clip=5.0):
+        self.model = model
+        self.scaler = scaler
+        self.clip = clip
+        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self.loss = util.masked_mae
+
+    def _shared_step(self, inputs, targets, training: bool):
+        if training:
+            self.model.train()
+            self.optimizer.zero_grad()
+        else:
+            self.model.eval()
+
+        padded_inputs = nn.functional.pad(inputs, (1, 0, 0, 0))
+        outputs = self.model(padded_inputs).transpose(1, 3)
+        real = targets.unsqueeze(1)
+        pred = self.scaler.inverse_transform(outputs)
+        loss = self.loss(pred, real, 0.0)
+
+        if training:
+            loss.backward()
+            if self.clip is not None:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip)
+            self.optimizer.step()
+
+        mape = util.masked_mape(pred, real, 0.0).item()
+        rmse = util.masked_rmse(pred, real, 0.0).item()
+        return {
+            "loss": loss.item(),
+            "mape": mape,
+            "rmse": rmse,
+            "pred": pred.detach(),
+            "real": real.detach(),
+        }
+
+    def train_batch(self, inputs, targets):
+        return self._shared_step(inputs, targets, training=True)
+
+    @torch.no_grad()
+    def eval_batch(self, inputs, targets):
+        return self._shared_step(inputs, targets, training=False)
+
+
+class DistillationTrainer:
+    """多粒度知识蒸馏训练器。"""
+
+    def __init__(
+        self,
+        teacher_model,
+        student_model,
+        supports,
+        scaler,
+        learning_rate,
+        weight_decay,
+        hard_weight=0.6,
+        soft_weight=0.2,
+        feature_weight=0.1,
+        relation_weight=0.1,
+        temperature=3.0,
+        enable_reliability=True,
+        enable_curriculum=True,
+        clip=5.0,
+    ):
+        self.teacher_model = teacher_model
+        self.student_model = student_model
+        self.supports = supports
+        self.scaler = scaler
+        self.clip = clip
+        self.current_epoch = 1
+        self.total_epochs = 1
+
+        self.distill_loss = RegressionDistillationLoss(
+            hard_weight=hard_weight,
+            soft_weight=soft_weight,
+            feature_weight=feature_weight,
+            relation_weight=relation_weight,
+            temperature=temperature,
+            enable_reliability=enable_reliability,
+            enable_curriculum=enable_curriculum,
+        )
+
+        teacher_feature_dim = getattr(self.teacher_model, "feature_dim")
+        student_feature_dim = getattr(self.student_model, "feature_dim")
+        self.feature_adapter = nn.Conv2d(student_feature_dim, teacher_feature_dim, kernel_size=(1, 1)).to(
+            next(self.student_model.parameters()).device
+        )
+
+        params = list(self.student_model.parameters()) + list(self.feature_adapter.parameters())
+        self.optimizer = optim.Adam(params, lr=learning_rate, weight_decay=weight_decay)
+
+        self.teacher_model.eval()
+        for param in self.teacher_model.parameters():
+            param.requires_grad = False
+
+    def set_epoch(self, current_epoch: int, total_epochs: int):
+        """在每个 epoch 开始时更新课程蒸馏进度。"""
+        self.current_epoch = current_epoch
+        self.total_epochs = max(total_epochs, 1)
+
+    def _shared_step(self, inputs, targets, training: bool):
+        if training:
+            self.student_model.train()
+            self.optimizer.zero_grad()
+        else:
+            self.student_model.eval()
+
+        real = targets.unsqueeze(1)
+        teacher_inputs = nn.functional.pad(inputs, (1, 0, 0, 0))
+
+        if not training:
+            step_start = time.perf_counter()
+
+        with torch.no_grad():
+            teacher_outputs = self.teacher_model(teacher_inputs, return_features=True)
+
+        student_outputs = self.student_model(inputs, self.supports, return_features=True)
+
+        teacher_pred = self.scaler.inverse_transform(teacher_outputs["prediction"].transpose(1, 3))
+        student_pred = self.scaler.inverse_transform(student_outputs["prediction"].transpose(1, 3))
+
+        adapted_student_feature = self.feature_adapter(student_outputs["hidden_state"])
+        total_loss, loss_items = self.distill_loss(
+            student_pred=student_pred,
+            teacher_pred=teacher_pred,
+            real_value=real,
+            student_feature=adapted_student_feature,
+            teacher_feature=teacher_outputs["hidden_state"],
+            current_epoch=self.current_epoch,
+            total_epochs=self.total_epochs,
+            null_val=0.0,
+        )
+
+        if training:
+            total_loss.backward()
+            if self.clip is not None:
+                torch.nn.utils.clip_grad_norm_(self.student_model.parameters(), self.clip)
+                torch.nn.utils.clip_grad_norm_(self.feature_adapter.parameters(), self.clip)
+            self.optimizer.step()
+
+        latency = (time.perf_counter() - step_start) * 1000.0 if not training else 0.0
+
+        mape = util.masked_mape(student_pred, real, 0.0).item()
+        rmse = util.masked_rmse(student_pred, real, 0.0).item()
+        return {
+            "loss": total_loss.item(),
+            "mape": mape,
+            "rmse": rmse,
+            "pred": student_pred.detach(),
+            "real": real.detach(),
+            "teacher_pred": teacher_pred.detach(),
+            "student_hidden": student_outputs["hidden_state"].detach(),
+            "teacher_hidden": teacher_outputs["hidden_state"].detach(),
+            "latency_ms": latency,
+            **loss_items,
+        }
+
+    def train_batch(self, inputs, targets):
+        return self._shared_step(inputs, targets, training=True)
+
+    @torch.no_grad()
+    def eval_batch(self, inputs, targets):
+        return self._shared_step(inputs, targets, training=False)
