@@ -500,3 +500,56 @@ python scripts/sanity_check.py
 
 - 流程相同
 - 但现在 README 已经给出完整的 PEMS-BAY 版本命令，不必再手动自行推导
+
+## 19. 新增简洁中文版框架图文档
+
+文档位置：
+- [docs/simple_paper_diagrams_cn.md](/C:/Users/86151/Documents/New%20project/docs/simple_paper_diagrams_cn.md)
+
+这份文档的作用：
+- 提供比原来更简洁的中文版论文结构图
+- 采用“大模块相连 + 每个模块再细化”的方式
+- 适合直接在 draw.io、Visio、ProcessOn、PPT 中重画
+
+与原有图文档的区别：
+- [docs/paper_diagrams.md](/C:/Users/86151/Documents/New%20project/docs/paper_diagrams.md)
+  更详细，线条更多，适合完整表达
+- [docs/simple_paper_diagrams_cn.md](/C:/Users/86151/Documents/New%20project/docs/simple_paper_diagrams_cn.md)
+  更简洁，适合论文排版和人工重画
+## 2026-03-22 RMGD-KD Current Status
+
+- Teacher on METR-LA:
+  - MAE = 3.0417
+  - MAPE = 0.0830
+  - RMSE = 6.0484
+  - params = 309,400
+  - latency = 54.40 ms/batch
+- Student comparison on the same fixed student structure:
+  - Baseline Student: MAE = 3.4762, MAPE = 0.1020, RMSE = 6.6793
+  - Vanilla KD: MAE = 3.4645, MAPE = 0.0999, RMSE = 6.6605
+  - RMGD-KD (old checkpoint selection): MAE = 3.5549, MAPE = 0.1034, RMSE = 6.9349
+  - RMGD-KD (selected by val_mae after fix): MAE = 3.5175, MAPE = 0.1023, RMSE = 6.7120
+
+## 2026-03-22 Key Conclusion
+
+- Current RMGD-KD is still worse than both Baseline Student and Vanilla KD on METR-LA.
+- Therefore the full method is not yet validated.
+- The issue is no longer only the checkpoint-selection bug. That bug was fixed, but the full method still underperforms.
+
+## 2026-03-22 Code Fix Already Applied
+
+- `train_student_kd.py` now selects the best student checkpoint by `val_mae` instead of total distillation loss.
+- `engine.py` now returns student prediction `mae` during train/eval.
+- `utils/plotting.py` now prefers plotting `train_mae` / `val_mae` when available.
+
+## 2026-03-22 Next Recommended Experiments
+
+- Priority 1:
+  - run `w/o relation`
+  - run `w/o feature`
+- Reason:
+  - `Vanilla KD` is better than current `RMGD-KD`
+  - the most suspicious extra modules are relation distillation and feature distillation
+- After that:
+  - compare `Teacher`, `Baseline Student`, `Vanilla KD`, `w/o relation`, `w/o feature`, and `RMGD-KD`
+- Only after the core method becomes reasonable should the user continue with later paper-packaging steps such as benchmark summaries, efficiency tradeoff figure, and full result table polishing.

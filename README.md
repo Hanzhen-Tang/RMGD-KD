@@ -280,14 +280,17 @@ python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/a
 - `outputs/figures/metr_teacher_eval_teacher_relation.png` #教师节点关系热力图
   - `outputs/predictions/metr_teacher_eval_teacher_sensor10.csv`#预测结果数值
 
-### 第 3 步：训练完整方法 RMGD-KD
+### 第 3 步：训练完整方法 RMGD-KD 训练学生
 
 ```powershell
+# 基础参数base         # train_loss=2.9186, val_loss=2.0322, soft=3.4932, feat=0.0041, rel=0.0201, visible_h=8, val_latency=143.47ms, time=447.74s
 python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.6 --soft_weight 0.2 --feature_weight 0.1 --relation_weight 0.1 --temperature 3.0 --exp_name metr_student_rmgd
+#选择最优标准从 val_loss 改成了 val_mae。 train_total=2.9652, train_mae=3.6756, val_total=2.0699, val_mae=3.1637, soft=3.7876, feat=0.0040, rel=0.0194, visible_h=12, val_latency=143.36ms, time=415.05s
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.6 --soft_weight 0.2 --feature_weight 0.1 --relation_weight 0.1 --temperature 3.0 --exp_name metr_student_rmgd_mae_select
 ```
 
 这一步已经包含：
-
+ 
 - 真实标签监督
 - 可靠性加权蒸馏
 - 图关系蒸馏
@@ -295,21 +298,24 @@ python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/se
 
 输出文件：
 
-- `checkpoints/student/metr_student_rmgd_best.pt`
-- `outputs/reports/metr_student_rmgd_student_history.json`
-- `outputs/figures/metr_student_rmgd_student_curve.png`
+- `checkpoints/student/metr_student_rmgd_best.pt` #训练好的学生模型权重（各种参数和最优损失、epoch）用于测试test
+- `outputs/reports/metr_student_rmgd_student_history.json` #训练历史记录
+- `outputs/figures/metr_student_rmgd_student_curve.png` #训练曲线图
 
 ### 第 4 步：测试完整方法 RMGD-KD
 
 ```powershell
+# 基础参数base              #[student] average -> MAE=3.5549, MAPE=0.1034, RMSE=6.9349, params=27,404, latency=16.17ms/batch
 python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_rmgd_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name metr_student_rmgd_eval
+#选择最优标准从 val_loss 改成了 val_mae。[student] average -> MAE=3.5175, MAPE=0.1023, RMSE=6.7120, params=27,404, latency=14.02ms/batch
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_rmgd_mae_select_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name metr_student_rmgd_mae_select_eval
 ```
 
 输出文件：
 
-- `outputs/figures/metr_student_rmgd_eval_student_sensor10_h12.png`
-- `outputs/figures/metr_student_rmgd_eval_student_relation.png`
-- `outputs/predictions/metr_student_rmgd_eval_student_sensor10.csv`
+- `outputs/figures/metr_student_rmgd_eval_student_sensor10_h12.png` #预测曲线图
+- `outputs/figures/metr_student_rmgd_eval_student_relation.png` #学生节点关系热力图
+- `outputs/predictions/metr_student_rmgd_eval_student_sensor10.csv` #预测结果数值
 
 ### 第 5 步：统计教师模型参数量和推理速度
 
@@ -388,15 +394,24 @@ python scripts/plot_efficiency_tradeoff.py --summary_csv outputs/reports/metr_su
 只保留硬标签监督，不做关系蒸馏、不做特征蒸馏、不做软蒸馏：
 
 ```powershell
+# 训练 base参数              # train_loss=3.6102, val_loss=3.1212, soft=4.2633, feat=0.0170, rel=0.5845, visible_h=12, val_latency=142.72ms, time=447.97s
 python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 1.0 --soft_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --disable_reliability --disable_curriculum --exp_name metr_student_baseline
+#测试                    # average -> MAE=3.4762, MAPE=0.1020, RMSE=6.6793, params=27,404, latency=13.03ms/batch
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_baseline_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name metr_student_baseline_eval
 ```
-
+#预测曲线已保存到: outputs\figures\metr_student_baseline_eval_student_sensor10_h12.png
+#预测数值已保存到: outputs\predictions\metr_student_baseline_eval_student_sensor10.csv
+#节点关系热力图已保存到: outputs\figures\metr_student_baseline_eval_student_relation.png
 ### 2. Vanilla KD
 
 有软蒸馏，但去掉可靠性和课程蒸馏，也去掉关系蒸馏：
 
 ```powershell
+#base            train_loss=3.7261, val_loss=2.9924, soft=3.9597, feat=0.0170, rel=0.5845, visible_h=12, val_latency=142.68ms, time=374.18s
 python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --feature_weight 0.0 --relation_weight 0.0 --disable_reliability --disable_curriculum --exp_name metr_student_vanilla_kd
+#测试             average -> MAE=3.4645, MAPE=0.0999, RMSE=6.6605, params=27,404, latency=12.64ms/batch
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_vanilla_kd_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name metr_student_vanilla_kd_eval
+
 ```
 
 ### 3. 去掉可靠性蒸馏
@@ -415,12 +430,16 @@ python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/se
 
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.6 --soft_weight 0.2 --feature_weight 0.1 --relation_weight 0.0 --exp_name metr_student_wo_relation
+#测试
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_wo_relation_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name metr_student_wo_relation_eval
 ```
 
 ### 6. 去掉特征蒸馏
 
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.6 --soft_weight 0.2 --feature_weight 0.0 --relation_weight 0.1 --exp_name metr_student_wo_feature
+#测试
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_wo_feature_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name metr_student_wo_feature_eval
 ```
 
 ### 7. 完整方法

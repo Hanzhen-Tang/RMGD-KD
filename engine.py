@@ -167,10 +167,12 @@ class DistillationTrainer:
 
         latency = (time.perf_counter() - step_start) * 1000.0 if not training else 0.0
 
+        mae = util.masked_mae(student_pred, real, 0.0).item()
         mape = util.masked_mape(student_pred, real, 0.0).item()
         rmse = util.masked_rmse(student_pred, real, 0.0).item()
         return {
             "loss": total_loss.item(),
+            "mae": mae,
             "mape": mape,
             "rmse": rmse,
             "pred": student_pred.detach(),

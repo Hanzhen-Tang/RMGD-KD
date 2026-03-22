@@ -126,9 +126,11 @@ def main():
     ensure_dir(args.save_dir)
     history = {
         "train_loss": [],
+        "train_mae": [],
         "train_mape": [],
         "train_rmse": [],
         "val_loss": [],
+        "val_mae": [],
         "val_mape": [],
         "val_rmse": [],
         "hard_loss": [],
@@ -138,7 +140,8 @@ def main():
         "visible_horizon": [],
         "val_latency_ms": [],
     }
-    best_val_loss = float("inf")
+    best_val_mae = float("inf")
+    best_val_loss_at_best_mae = float("inf")
     best_state = None
     best_epoch = -1
 
@@ -156,13 +159,14 @@ def main():
         trainer.set_epoch(epoch, args.epochs)
         dataloader["train_loader"].shuffle()
 
-        train_losses, train_mapes, train_rmses = [], [], []
+        train_losses, train_maes, train_mapes, train_rmses = [], [], [], []
         hard_losses, soft_losses, feature_losses, relation_losses = [], [], [], []
 
         for batch_idx, (x, y) in enumerate(dataloader["train_loader"].get_iterator(), start=1):
             inputs, targets = prepare_batch(x, y, device)
             metrics = trainer.train_batch(inputs, targets)
             train_losses.append(metrics["loss"])
+            train_maes.append(metrics["mae"])
             train_mapes.append(metrics["mape"])
             train_rmses.append(metrics["rmse"])
             hard_losses.append(metrics["hard_loss"])
@@ -178,29 +182,34 @@ def main():
                     f"rel={metrics['relation_loss']:.4f}, visible_h={metrics['visible_horizon']}"
                 )
 
-        val_losses, val_mapes, val_rmses, val_latencies = [], [], [], []
+        val_losses, val_maes, val_mapes, val_rmses, val_latencies = [], [], [], [], []
         last_visible_horizon = seq_length
         for x, y in dataloader["val_loader"].get_iterator():
             inputs, targets = prepare_batch(x, y, device)
             metrics = trainer.eval_batch(inputs, targets)
             val_losses.append(metrics["loss"])
+            val_maes.append(metrics["mae"])
             val_mapes.append(metrics["mape"])
             val_rmses.append(metrics["rmse"])
             val_latencies.append(metrics["latency_ms"])
             last_visible_horizon = metrics["visible_horizon"]
 
         mean_train_loss = float(np.mean(train_losses))
+        mean_train_mae = float(np.mean(train_maes))
         mean_train_mape = float(np.mean(train_mapes))
         mean_train_rmse = float(np.mean(train_rmses))
         mean_val_loss = float(np.mean(val_losses))
+        mean_val_mae = float(np.mean(val_maes))
         mean_val_mape = float(np.mean(val_mapes))
         mean_val_rmse = float(np.mean(val_rmses))
         mean_val_latency = float(np.mean(val_latencies))
 
         history["train_loss"].append(mean_train_loss)
+        history["train_mae"].append(mean_train_mae)
         history["train_mape"].append(mean_train_mape)
         history["train_rmse"].append(mean_train_rmse)
         history["val_loss"].append(mean_val_loss)
+        history["val_mae"].append(mean_val_mae)
         history["val_mape"].append(mean_val_mape)
         history["val_rmse"].append(mean_val_rmse)
         history["hard_loss"].append(float(np.mean(hard_losses)))
@@ -212,14 +221,16 @@ def main():
 
         print(
             f"[RMGD-KD][Epoch {epoch:03d}] "
-            f"train_loss={mean_train_loss:.4f}, val_loss={mean_val_loss:.4f}, "
+            f"train_total={mean_train_loss:.4f}, train_mae={mean_train_mae:.4f}, "
+            f"val_total={mean_val_loss:.4f}, val_mae={mean_val_mae:.4f}, "
             f"soft={history['soft_loss'][-1]:.4f}, feat={history['feature_loss'][-1]:.4f}, "
             f"rel={history['relation_loss'][-1]:.4f}, visible_h={last_visible_horizon}, "
             f"val_latency={mean_val_latency:.2f}ms, time={time.time() - epoch_start:.2f}s"
         )
 
-        if mean_val_loss < best_val_loss:
-            best_val_loss = mean_val_loss
+        if mean_val_mae < best_val_mae:
+            best_val_mae = mean_val_mae
+            best_val_loss_at_best_mae = mean_val_loss
             best_epoch = epoch
             best_state = copy.deepcopy(student.state_dict())
 
@@ -230,7 +241,8 @@ def main():
             "method_name": "RMGD-KD",
             "model_state_dict": best_state,
             "best_epoch": best_epoch,
-            "best_val_loss": best_val_loss,
+            "best_val_mae": best_val_mae,
+            "best_val_loss_at_best_mae": best_val_loss_at_best_mae,
             "num_nodes": num_nodes,
             "in_dim": in_dim,
             "seq_length": seq_length,
@@ -260,6 +272,8 @@ def main():
     figure_path = os.path.join("outputs", "figures", f"{args.exp_name}_student_curve.png")
     save_history(history, report_path)
     plot_training_curves(history, figure_path)
+    print(f"[RMGD-KD] best checkpoint selected by val_mae: epoch={best_epoch}, val_mae={best_val_mae:.4f}, val_total={best_val_loss_at_best_mae:.4f}")
+    best_val_loss = best_val_loss_at_best_mae
 
     print(f"学生模型训练结束，最优 epoch={best_epoch}, val_loss={best_val_loss:.4f}")
     print(f"模型已保存到: {checkpoint_path}")

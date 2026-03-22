@@ -26,11 +26,14 @@ def save_history(history: Dict, save_path: str):
 def plot_training_curves(history: Dict, save_path: str):
     ensure_dir(os.path.dirname(save_path))
     epochs = np.arange(1, len(history["train_loss"]) + 1)
+    train_curve = history.get("train_mae", history["train_loss"])
+    val_curve = history.get("val_mae", history["val_loss"])
+    ylabel = "MAE" if "train_mae" in history and "val_mae" in history else "Loss"
     plt.figure(figsize=(10, 5))
-    plt.plot(epochs, history["train_loss"], label="Train MAE")
-    plt.plot(epochs, history["val_loss"], label="Val MAE")
+    plt.plot(epochs, train_curve, label="Train MAE")
+    plt.plot(epochs, val_curve, label="Val MAE")
     plt.xlabel("Epoch")
-    plt.ylabel("Loss")
+    plt.ylabel(ylabel)
     plt.title("Training Curve")
     plt.legend()
     plt.grid(alpha=0.3)
