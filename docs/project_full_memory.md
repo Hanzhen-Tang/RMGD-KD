@@ -531,6 +531,8 @@ python scripts/sanity_check.py
   - RMGD-KD (selected by val_mae after fix): MAE = 3.5175, MAPE = 0.1023, RMSE = 6.7120
   - w/o relation: MAE = 3.5102, MAPE = 0.0986, RMSE = 6.7805
   - w/o feature: MAE = 3.5048, MAPE = 0.1009, RMSE = 6.7468
+  - w/o reliability: MAE = 3.4736, MAPE = 0.0994, RMSE = 6.6470
+  - w/o curriculum: MAE = 3.5261, MAPE = 0.1015, RMSE = 6.8269
 
 ## 2026-03-22 Key Conclusion
 
@@ -539,6 +541,8 @@ python scripts/sanity_check.py
 - The issue is no longer only the checkpoint-selection bug. That bug was fixed, but the full method still underperforms.
 - Initial ablation indicates both relation distillation and feature distillation are currently negative contributors.
 - Removing feature distillation improves the full method slightly more than removing relation distillation.
+- Reliability weighting appears to be the strongest negative contributor among the four added modules.
+- Curriculum distillation appears to be the only clearly positive contributor among the four added modules under the current implementation.
 
 ## 2026-03-22 Code Fix Already Applied
 
@@ -549,14 +553,22 @@ python scripts/sanity_check.py
 ## 2026-03-22 Next Recommended Experiments
 
 - Priority 1:
-  - run `w/o curriculum`
-  - run `w/o reliability`
+  - current ablations are now complete for:
+    - `w/o relation`
+    - `w/o feature`
+    - `w/o reliability`
+    - `w/o curriculum`
 - Reason:
-  - `Vanilla KD` is better than current `RMGD-KD`
-  - relation distillation and feature distillation have already shown negative contribution under the current setting
-  - reliability weighting and curriculum distillation still need to be isolated
+  - `Vanilla KD` is still the best student baseline
+  - reliability is negative
+  - feature is negative
+  - relation is negative
+  - curriculum is positive, but not enough to offset the negative modules
 - After that:
   - compare `Teacher`, `Baseline Student`, `Vanilla KD`, `w/o relation`, `w/o feature`, `w/o curriculum`, `w/o reliability`, and `RMGD-KD`
+  - then decide whether to:
+    - enter a second-round method cleanup, or
+    - switch to a conservative fallback route centered on `Vanilla KD`
 - Only after the core method becomes reasonable should the user continue with later paper-packaging steps such as benchmark summaries, efficiency tradeoff figure, and full result table polishing.
 
 ## 2026-03-23 Review Before Further Code Changes
