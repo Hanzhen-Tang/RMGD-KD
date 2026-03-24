@@ -529,12 +529,16 @@ python scripts/sanity_check.py
   - Vanilla KD: MAE = 3.4645, MAPE = 0.0999, RMSE = 6.6605
   - RMGD-KD (old checkpoint selection): MAE = 3.5549, MAPE = 0.1034, RMSE = 6.9349
   - RMGD-KD (selected by val_mae after fix): MAE = 3.5175, MAPE = 0.1023, RMSE = 6.7120
+  - w/o relation: MAE = 3.5102, MAPE = 0.0986, RMSE = 6.7805
+  - w/o feature: MAE = 3.5048, MAPE = 0.1009, RMSE = 6.7468
 
 ## 2026-03-22 Key Conclusion
 
 - Current RMGD-KD is still worse than both Baseline Student and Vanilla KD on METR-LA.
 - Therefore the full method is not yet validated.
 - The issue is no longer only the checkpoint-selection bug. That bug was fixed, but the full method still underperforms.
+- Initial ablation indicates both relation distillation and feature distillation are currently negative contributors.
+- Removing feature distillation improves the full method slightly more than removing relation distillation.
 
 ## 2026-03-22 Code Fix Already Applied
 
@@ -545,11 +549,45 @@ python scripts/sanity_check.py
 ## 2026-03-22 Next Recommended Experiments
 
 - Priority 1:
-  - run `w/o relation`
-  - run `w/o feature`
+  - run `w/o curriculum`
+  - run `w/o reliability`
 - Reason:
   - `Vanilla KD` is better than current `RMGD-KD`
-  - the most suspicious extra modules are relation distillation and feature distillation
+  - relation distillation and feature distillation have already shown negative contribution under the current setting
+  - reliability weighting and curriculum distillation still need to be isolated
 - After that:
-  - compare `Teacher`, `Baseline Student`, `Vanilla KD`, `w/o relation`, `w/o feature`, and `RMGD-KD`
+  - compare `Teacher`, `Baseline Student`, `Vanilla KD`, `w/o relation`, `w/o feature`, `w/o curriculum`, `w/o reliability`, and `RMGD-KD`
 - Only after the core method becomes reasonable should the user continue with later paper-packaging steps such as benchmark summaries, efficiency tradeoff figure, and full result table polishing.
+
+## 2026-03-23 Review Before Further Code Changes
+
+- The user decided not to modify the method code immediately.
+- Current plan:
+  - first finish the remaining two ablations:
+    - `w/o curriculum`
+    - `w/o reliability`
+  - then decide whether to enter a second-round method revision
+- Reason:
+  - changing the method definition now would invalidate most current full-method ablation results as final-paper evidence
+  - it is better to finish the current version's diagnostic ablations first
+
+## 2026-03-23 Likely Method-Level Weak Points Identified (Not Yet Modified)
+
+- Reliability map currently does not use masked invalid values (`real == 0`) when computing teacher error.
+- Curriculum distillation currently does not fully shut off future horizons because the weighting path adds a tiny epsilon before normalization.
+- Feature distillation may be semantically misaligned:
+  - teacher feature comes from a much deeper high-level representation
+  - student feature comes from a much shallower lightweight readout
+- Relation distillation may be too late-stage and over-smoothed because it is computed on already time-collapsed features.
+
+## 2026-03-23 Decision Rule
+
+- If `w/o curriculum` and `w/o reliability` are also poor:
+  - do not rush into weight tuning only
+  - first consider a second-round method cleanup
+  - top priority fixes to consider next:
+    - masked reliability map
+    - true curriculum masking
+- If one of those ablations becomes clearly better than current `RMGD-KD`:
+  - isolate that module as a likely problem source
+  - decide whether to simplify the final method rather than keep all modules
