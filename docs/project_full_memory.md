@@ -665,6 +665,43 @@ python scripts/sanity_check.py
   - optionally build a simplified method around only the most defensible extra component(s), if any
   - otherwise switch to the conservative fallback narrative
 
+## 2026-03-26 v3 Branch Direction
+
+- The user created a new `v3` branch for a cleaner method redesign.
+- v3 method target:
+  - keep `Vanilla KD` as the stable backbone
+  - keep `curriculum distillation`
+  - replace continuous reliability weighting with simpler `confidence filtering`
+  - remove `feature distillation`
+  - remove `relation distillation`
+
+## 2026-03-26 v3 Code Changes
+
+- Updated:
+  - [train_student_kd.py](/C:/Users/86151/Documents/New%20project/train_student_kd.py)
+  - [engine.py](/C:/Users/86151/Documents/New%20project/engine.py)
+  - [losses/distillation.py](/C:/Users/86151/Documents/New%20project/losses/distillation.py)
+- v3 defaults now represent:
+  - hard supervision
+  - confidence-filtered soft distillation
+  - curriculum distillation
+- `feature_weight` and `relation_weight` are now zero by default in v3.
+- `feature_adapter` is no longer counted or optimized unless feature/relation alignment is explicitly enabled.
+
+## 2026-03-26 v3 Root Documents
+
+- Branch explanation:
+  - [v3_branch_notes.md](/C:/Users/86151/Documents/New%20project/v3_branch_notes.md)
+- v3 run workflow:
+  - [v3_workflow.md](/C:/Users/86151/Documents/New%20project/v3_workflow.md)
+
+## 2026-03-26 v3 Naming Rule
+
+- All new v3 experiments should explicitly include the `v3` suffix, for example:
+  - `metr_student_cckd_v3`
+  - `metr_student_wo_confidence_v3`
+  - `metr_student_wo_curriculum_v3`
+
 ## 2026-03-24 New Workflow Document
 
 - Added a dedicated second-round workflow document:

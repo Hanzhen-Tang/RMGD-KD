@@ -12,8 +12,11 @@ from model import GWNetTeacher, SimpleGCNStudent
 from utils.plotting import plot_training_curves, save_history
 
 
+METHOD_NAME = "CCKD-v3"
+
+
 def parse_args():
-    parser = argparse.ArgumentParser(description="训练带创新点的蒸馏学生模型。")
+    parser = argparse.ArgumentParser(description="v3: 可信度筛选 + 课程蒸馏的学生训练入口")
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--data", type=str, default="data/METR-LA")
     parser.add_argument("--adjdata", type=str, default="data/sensor_graph/adj_mx.pkl")
@@ -28,15 +31,17 @@ def parse_args():
     parser.add_argument("--student_layers", type=int, default=2)
     parser.add_argument("--student_order", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.3)
-    parser.add_argument("--hard_weight", type=float, default=0.6)
-    parser.add_argument("--soft_weight", type=float, default=0.2)
-    parser.add_argument("--feature_weight", type=float, default=0.1)
-    parser.add_argument("--relation_weight", type=float, default=0.1)
+    parser.add_argument("--hard_weight", type=float, default=0.7)
+    parser.add_argument("--soft_weight", type=float, default=0.3)
+    parser.add_argument("--feature_weight", type=float, default=0.0)
+    parser.add_argument("--relation_weight", type=float, default=0.0)
     parser.add_argument("--temperature", type=float, default=3.0)
-    parser.add_argument("--disable_reliability", action="store_true")
+    parser.add_argument("--confidence_keep_ratio", type=float, default=0.7)
+    parser.add_argument("--disable_confidence_filter", action="store_true")
+    parser.add_argument("--disable_reliability", dest="disable_confidence_filter", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--disable_curriculum", action="store_true")
     parser.add_argument("--save_dir", type=str, default="checkpoints/student")
-    parser.add_argument("--exp_name", type=str, default="metr_student_rmgd")
+    parser.add_argument("--exp_name", type=str, default="metr_student_cckd_v3")
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -115,8 +120,9 @@ def main():
         feature_weight=args.feature_weight,
         relation_weight=args.relation_weight,
         temperature=args.temperature,
-        enable_reliability=not args.disable_reliability,
+        enable_confidence_filter=not args.disable_confidence_filter,
         enable_curriculum=not args.disable_curriculum,
+        confidence_keep_ratio=args.confidence_keep_ratio,
     )
 
     teacher_params = count_parameters(teacher)
@@ -138,6 +144,9 @@ def main():
         "feature_loss": [],
         "relation_loss": [],
         "visible_horizon": [],
+        "confidence_keep_ratio": [],
+        "kept_node_ratio": [],
+        "kept_horizon_ratio": [],
         "val_latency_ms": [],
     }
     best_val_mae = float("inf")
@@ -146,12 +155,12 @@ def main():
     best_epoch = -1
 
     print(
-        f"蒸馏训练开始: num_nodes={num_nodes}, in_dim={in_dim}, horizon={seq_length}, "
-        f"student_hidden={args.student_hidden_dim}, device={device}"
+        f"[{METHOD_NAME}] start training | num_nodes={num_nodes}, in_dim={in_dim}, "
+        f"horizon={seq_length}, student_hidden={args.student_hidden_dim}, device={device}"
     )
     print(
-        f"教师参数量={teacher_params:,}, 学生参数量={student_params:,}, "
-        f"压缩率={compression_ratio:.2f}x"
+        f"[{METHOD_NAME}] teacher_params={teacher_params:,}, student_params={student_params:,}, "
+        f"compression_ratio={compression_ratio:.2f}x"
     )
 
     for epoch in range(1, args.epochs + 1):
@@ -160,7 +169,8 @@ def main():
         dataloader["train_loader"].shuffle()
 
         train_losses, train_maes, train_mapes, train_rmses = [], [], [], []
-        hard_losses, soft_losses, feature_losses, relation_losses = [], [], [], []
+        hard_losses, soft_losses = [], []
+        feature_losses, relation_losses = [], []
 
         for batch_idx, (x, y) in enumerate(dataloader["train_loader"].get_iterator(), start=1):
             inputs, targets = prepare_batch(x, y, device)
@@ -176,13 +186,14 @@ def main():
 
             if batch_idx % args.print_every == 0 or batch_idx == 1:
                 print(
-                    f"[RMGD-KD][Epoch {epoch:03d}][Iter {batch_idx:03d}] "
+                    f"[{METHOD_NAME}][Epoch {epoch:03d}][Iter {batch_idx:03d}] "
                     f"total={metrics['loss']:.4f}, hard={metrics['hard_loss']:.4f}, "
-                    f"soft={metrics['soft_loss']:.4f}, feat={metrics['feature_loss']:.4f}, "
-                    f"rel={metrics['relation_loss']:.4f}, visible_h={metrics['visible_horizon']}"
+                    f"soft={metrics['soft_loss']:.4f}, conf_keep={metrics['confidence_keep_ratio']:.4f}, "
+                    f"visible_h={metrics['visible_horizon']}"
                 )
 
         val_losses, val_maes, val_mapes, val_rmses, val_latencies = [], [], [], [], []
+        kept_ratios, kept_node_ratios, kept_horizon_ratios = [], [], []
         last_visible_horizon = seq_length
         for x, y in dataloader["val_loader"].get_iterator():
             inputs, targets = prepare_batch(x, y, device)
@@ -192,6 +203,9 @@ def main():
             val_mapes.append(metrics["mape"])
             val_rmses.append(metrics["rmse"])
             val_latencies.append(metrics["latency_ms"])
+            kept_ratios.append(metrics["confidence_keep_ratio"])
+            kept_node_ratios.append(metrics["mean_node_weight"])
+            kept_horizon_ratios.append(metrics["mean_horizon_weight"])
             last_visible_horizon = metrics["visible_horizon"]
 
         mean_train_loss = float(np.mean(train_losses))
@@ -217,15 +231,18 @@ def main():
         history["feature_loss"].append(float(np.mean(feature_losses)))
         history["relation_loss"].append(float(np.mean(relation_losses)))
         history["visible_horizon"].append(int(last_visible_horizon))
+        history["confidence_keep_ratio"].append(float(np.mean(kept_ratios)))
+        history["kept_node_ratio"].append(float(np.mean(kept_node_ratios)))
+        history["kept_horizon_ratio"].append(float(np.mean(kept_horizon_ratios)))
         history["val_latency_ms"].append(mean_val_latency)
 
         print(
-            f"[RMGD-KD][Epoch {epoch:03d}] "
+            f"[{METHOD_NAME}][Epoch {epoch:03d}] "
             f"train_total={mean_train_loss:.4f}, train_mae={mean_train_mae:.4f}, "
             f"val_total={mean_val_loss:.4f}, val_mae={mean_val_mae:.4f}, "
-            f"soft={history['soft_loss'][-1]:.4f}, feat={history['feature_loss'][-1]:.4f}, "
-            f"rel={history['relation_loss'][-1]:.4f}, visible_h={last_visible_horizon}, "
-            f"val_latency={mean_val_latency:.2f}ms, time={time.time() - epoch_start:.2f}s"
+            f"soft={history['soft_loss'][-1]:.4f}, conf_keep={history['confidence_keep_ratio'][-1]:.4f}, "
+            f"visible_h={last_visible_horizon}, val_latency={mean_val_latency:.2f}ms, "
+            f"time={time.time() - epoch_start:.2f}s"
         )
 
         if mean_val_mae < best_val_mae:
@@ -238,7 +255,7 @@ def main():
     torch.save(
         {
             "model_type": "student",
-            "method_name": "RMGD-KD",
+            "method_name": METHOD_NAME,
             "model_state_dict": best_state,
             "best_epoch": best_epoch,
             "best_val_mae": best_val_mae,
@@ -259,7 +276,8 @@ def main():
             "feature_weight": args.feature_weight,
             "relation_weight": args.relation_weight,
             "temperature": args.temperature,
-            "disable_reliability": args.disable_reliability,
+            "confidence_keep_ratio": args.confidence_keep_ratio,
+            "disable_confidence_filter": args.disable_confidence_filter,
             "disable_curriculum": args.disable_curriculum,
             "teacher_params": teacher_params,
             "student_params": student_params,
@@ -272,12 +290,13 @@ def main():
     figure_path = os.path.join("outputs", "figures", f"{args.exp_name}_student_curve.png")
     save_history(history, report_path)
     plot_training_curves(history, figure_path)
-    print(f"[RMGD-KD] best checkpoint selected by val_mae: epoch={best_epoch}, val_mae={best_val_mae:.4f}, val_total={best_val_loss_at_best_mae:.4f}")
-    best_val_loss = best_val_loss_at_best_mae
 
-    print(f"学生模型训练结束，最优 epoch={best_epoch}, val_loss={best_val_loss:.4f}")
-    print(f"模型已保存到: {checkpoint_path}")
-    print(f"训练曲线已保存到: {figure_path}")
+    print(
+        f"[{METHOD_NAME}] best checkpoint selected by val_mae: "
+        f"epoch={best_epoch}, val_mae={best_val_mae:.4f}, val_total={best_val_loss_at_best_mae:.4f}"
+    )
+    print(f"[{METHOD_NAME}] checkpoint: {checkpoint_path}")
+    print(f"[{METHOD_NAME}] curve: {figure_path}")
 
 
 if __name__ == "__main__":
