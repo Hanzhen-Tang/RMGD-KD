@@ -603,3 +603,79 @@ python scripts/sanity_check.py
 - If one of those ablations becomes clearly better than current `RMGD-KD`:
   - isolate that module as a likely problem source
   - decide whether to simplify the final method rather than keep all modules
+
+## 2026-03-24 Second-Round Minimal Fix Applied
+
+- Modified code file:
+  - `losses/distillation.py`
+- Two targeted fixes were applied:
+  - masked invalid targets when computing reliability weights
+  - true curriculum masking for soft distillation horizons
+- No teacher-architecture change was made.
+- No student-architecture change was made.
+- Therefore:
+  - teacher checkpoint can be reused
+  - student-side full-method experiments must be retrained as a new version
+
+## 2026-03-25 RMGD-KD v2 Result
+
+- New `RMGD-KD v2` test result on METR-LA:
+  - MAE = 3.4851
+  - MAPE = 0.1013
+  - RMSE = 6.7346
+- Interpretation:
+  - clearly better than first-round `RMGD-KD` (3.5175)
+  - still slightly worse than `Baseline Student` (3.4762)
+  - still worse than `Vanilla KD` (3.4645)
+- Conclusion:
+  - the minimal fixes helped
+  - the suspected implementation details were indeed part of the problem
+  - but the full method is still not yet stronger than `Vanilla KD`
+
+## 2026-03-26 Second-Round V2 Ablation Results
+
+- `RMGD-KD v2`:
+  - MAE = 3.4851
+  - MAPE = 0.1013
+  - RMSE = 6.7346
+- `w/o reliability v2`:
+  - MAE = 3.4802
+  - MAPE = 0.0998
+  - RMSE = 6.6157
+- `w/o curriculum v2`:
+  - MAE = 3.4717
+  - MAPE = 0.1000
+  - RMSE = 6.6716
+
+## 2026-03-26 Updated Interpretation
+
+- After the minimal fixes, the full method improved compared with first-round `RMGD-KD`, so the implementation fixes were meaningful.
+- However, `RMGD-KD v2` is still not the best student model.
+- `w/o reliability v2` is better than `RMGD-KD v2`, which means reliability weighting still behaves as a negative contributor under the current design.
+- `w/o curriculum v2` is also better than `RMGD-KD v2`, which means curriculum is no longer providing a net positive gain in the current second-round setting.
+- Among the currently observed student variants:
+  - `Vanilla KD` remains the best MAE result at 3.4645
+  - `w/o curriculum v2` is the closest among the revised-method variants
+
+## 2026-03-26 Practical Decision Hint
+
+- At this stage, the full four-part method is still not validated.
+- A safer paper direction is likely:
+  - use `Vanilla KD` as the strongest stable baseline
+  - optionally build a simplified method around only the most defensible extra component(s), if any
+  - otherwise switch to the conservative fallback narrative
+
+## 2026-03-24 New Workflow Document
+
+- Added a dedicated second-round workflow document:
+  - [v2_minimal_fix_workflow.md](/C:/Users/86151/Documents/New%20project/v2_minimal_fix_workflow.md)
+- Purpose:
+  - avoid mixing first-round README instructions with second-round revised-method commands
+  - provide a clean command order for:
+    - `RMGD-KD v2`
+    - `w/o reliability v2`
+    - `w/o curriculum v2`
+    - benchmark
+    - teacher-student comparison figures
+    - result collection
+    - efficiency tradeoff figure

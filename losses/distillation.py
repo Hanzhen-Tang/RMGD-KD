@@ -6,42 +6,56 @@ from utils.metrics import masked_mae
 
 
 def _normalize_weight_map(weight_map: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
-    """把权重图归一化到均值约为 1，避免整体损失量级漂移。"""
+    """Normalize a weight map so its mean is close to 1."""
     return weight_map / (weight_map.mean().detach() + eps)
 
 
-def compute_reliability_map(teacher_pred: torch.Tensor, real_value: torch.Tensor) -> dict:
+def _build_valid_mask(real_value: torch.Tensor, null_val: float = 0.0, eps: float = 1e-6) -> torch.Tensor:
+    """Build a binary mask for valid regression targets."""
+    if torch.isnan(torch.tensor(null_val, device=real_value.device)):
+        valid_mask = ~torch.isnan(real_value)
+    else:
+        valid_mask = torch.abs(real_value - null_val) > eps
+    return valid_mask.float()
+
+
+def _masked_reduce_mean(value: torch.Tensor, mask: torch.Tensor, dim, keepdim: bool = True) -> torch.Tensor:
+    """Compute a masked mean with safe denominator handling."""
+    numerator = (value * mask).sum(dim=dim, keepdim=keepdim)
+    denominator = mask.sum(dim=dim, keepdim=keepdim).clamp_min(1.0)
+    return numerator / denominator
+
+
+def compute_reliability_map(teacher_pred: torch.Tensor, real_value: torch.Tensor, null_val: float = 0.0) -> dict:
     """
-    根据教师预测误差构造可靠性权重。
-    输入张量维度统一为:
+    Build node-wise and horizon-wise reliability weights from teacher error.
+
     teacher_pred / real_value: [B, 1, N, H]
     """
+    valid_mask = _build_valid_mask(real_value.detach(), null_val=null_val)
     teacher_error = torch.abs(teacher_pred.detach() - real_value.detach())
 
-    # 节点可靠性：节点误差越小，说明教师在该节点越可信。
-    node_error = teacher_error.mean(dim=(0, 1, 3), keepdim=True)  # [1, 1, N, 1]
-    node_weight = torch.exp(-node_error)
-    node_weight = _normalize_weight_map(node_weight)
+    node_error = _masked_reduce_mean(teacher_error, valid_mask, dim=(0, 1, 3), keepdim=True)  # [1, 1, N, 1]
+    node_weight = _normalize_weight_map(torch.exp(-node_error))
 
-    # 预测步可靠性：某 horizon 误差越小，说明该未来步知识更稳定。
-    horizon_error = teacher_error.mean(dim=(0, 1, 2), keepdim=True)  # [1, 1, 1, H]
-    horizon_weight = torch.exp(-horizon_error)
-    horizon_weight = _normalize_weight_map(horizon_weight)
+    horizon_error = _masked_reduce_mean(teacher_error, valid_mask, dim=(0, 1, 2), keepdim=True)  # [1, 1, 1, H]
+    horizon_weight = _normalize_weight_map(torch.exp(-horizon_error))
 
     reliability_map = _normalize_weight_map(node_weight * horizon_weight)
     return {
         "node_weight": node_weight,
         "horizon_weight": horizon_weight,
         "reliability_map": reliability_map,
+        "valid_mask": valid_mask,
     }
 
 
 def compute_curriculum_map(horizon_count: int, current_epoch: int, total_epochs: int, device) -> torch.Tensor:
     """
-    多步课程蒸馏:
-    - 前 1/3 训练: 蒸馏前 1/3 horizon
-    - 中间 1/3: 蒸馏前 2/3 horizon
-    - 后 1/3: 蒸馏全部 horizon
+    Curriculum schedule:
+    - first 1/3 epochs: first 1/3 horizons
+    - middle 1/3 epochs: first 2/3 horizons
+    - last 1/3 epochs: all horizons
     """
     if total_epochs <= 0:
         visible_horizon = horizon_count
@@ -61,9 +75,10 @@ def compute_curriculum_map(horizon_count: int, current_epoch: int, total_epochs:
 
 def compute_relation_matrix(node_feature: torch.Tensor) -> torch.Tensor:
     """
-    由节点隐藏表示构造节点关系矩阵。
-    node_feature: [B, C, N, 1] 或 [B, C, N, T]
-    返回: [B, N, N]
+    Compute node relation matrix from node features.
+
+    node_feature: [B, C, N, 1] or [B, C, N, T]
+    output: [B, N, N]
     """
     if node_feature.size(-1) > 1:
         pooled_feature = node_feature.mean(dim=-1)
@@ -77,7 +92,7 @@ def compute_relation_matrix(node_feature: torch.Tensor) -> torch.Tensor:
 
 
 class RegressionDistillationLoss(nn.Module):
-    """面向交通预测的多粒度蒸馏损失。"""
+    """Regression distillation loss for lightweight traffic forecasting."""
 
     def __init__(
         self,
@@ -109,11 +124,9 @@ class RegressionDistillationLoss(nn.Module):
         total_epochs,
         null_val=0.0,
     ):
-        # 1. 硬标签监督，保证学生直接学习真实交通状态。
         hard_loss = masked_mae(student_pred, real_value, null_val)
 
-        # 2. 可靠性加权 + 课程蒸馏，避免学生过度学习教师噪声。
-        reliability_items = compute_reliability_map(teacher_pred, real_value)
+        reliability_items = compute_reliability_map(teacher_pred, real_value, null_val=null_val)
         if self.enable_reliability:
             reliability_map = reliability_items["reliability_map"]
         else:
@@ -129,17 +142,18 @@ class RegressionDistillationLoss(nn.Module):
         else:
             curriculum_map = torch.ones((1, 1, 1, student_pred.size(-1)), device=student_pred.device)
 
-        weighted_map = _normalize_weight_map(reliability_map * (curriculum_map + 1e-6))
+        weighted_map = reliability_map * curriculum_map
+        if weighted_map.sum().detach().item() <= 0:
+            weighted_map = torch.ones_like(weighted_map)
+        weighted_map = _normalize_weight_map(weighted_map)
 
         soft_student = student_pred / self.temperature
         soft_teacher = teacher_pred.detach() / self.temperature
         soft_element = F.smooth_l1_loss(soft_student, soft_teacher, reduction="none")
         soft_loss = (soft_element * weighted_map).mean() * (self.temperature ** 2)
 
-        # 3. 特征蒸馏，让学生学习教师更高层的时空语义。
         feature_loss = F.mse_loss(student_feature, teacher_feature.detach())
 
-        # 4. 图关系蒸馏，让学生学习教师的空间拓扑关系知识。
         teacher_relation = compute_relation_matrix(teacher_feature.detach())
         student_relation = compute_relation_matrix(student_feature)
         relation_loss = F.mse_loss(student_relation, teacher_relation)
