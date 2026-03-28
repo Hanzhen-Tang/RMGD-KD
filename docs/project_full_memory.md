@@ -702,6 +702,34 @@ python scripts/sanity_check.py
   - `metr_student_wo_confidence_v3`
   - `metr_student_wo_curriculum_v3`
 
+## 2026-03-28 v3 Core Results
+
+- `CCKD-v3`:
+  - MAE = 3.4438
+  - MAPE = 0.0989
+  - RMSE = 6.6185
+- `w/o confidence v3`:
+  - MAE = 3.4645
+  - MAPE = 0.0976
+  - RMSE = 6.6382
+- `w/o curriculum v3`:
+  - MAE = 3.4681
+  - MAPE = 0.0988
+  - RMSE = 6.6553
+
+## 2026-03-28 v3 Interpretation
+
+- `CCKD-v3` is now better than:
+  - `Baseline Student`
+  - `Vanilla KD`
+  - `w/o confidence v3`
+  - `w/o curriculum v3`
+- This means the v3 method is validated under the current METR-LA setting.
+- Both retained modules show positive contribution:
+  - removing confidence filtering hurts MAE
+  - removing curriculum also hurts MAE
+- By MAE, curriculum contributes slightly more than confidence filtering in the current setting, but both are useful.
+
 ## 2026-03-24 New Workflow Document
 
 - Added a dedicated second-round workflow document:
@@ -716,3 +744,30 @@ python scripts/sanity_check.py
     - teacher-student comparison figures
     - result collection
     - efficiency tradeoff figure
+## 2026-03-28 新增记录：相近文献与 v3 图示提示
+
+- 当前 `CCKD-v3` 最新结果：
+  - `CCKD-v3`: `MAE=3.4438`, `MAPE=0.0989`, `RMSE=6.6185`
+  - `w/o confidence`: `MAE=3.4645`, `MAPE=0.0976`, `RMSE=6.6382`
+  - `w/o curriculum`: `MAE=3.4681`, `MAPE=0.0988`, `RMSE=6.6553`
+- 当前结论：
+  - `CCKD-v3` 已优于 `Baseline Student` 与 `Vanilla KD`
+  - `confidence filtering` 与 `curriculum` 两个模块均有正贡献
+  - `v3` 已可作为当前论文主方法版本
+- 新增根目录图示提示文档：
+  - [v3_ai_figure_prompts.md](C:/Users/86151/Documents/New%20project/v3_ai_figure_prompts.md)
+  - 该文档专门用于 `CCKD-v3` 的论文图示生成，避免误用旧版四模块方法图
+- 根目录运行手册已重写并补齐 `PEMS-BAY`：
+  - [v3_workflow.md](C:/Users/86151/Documents/New%20project/v3_workflow.md)
+  - 当前该文档已包含：
+    - `METR-LA` 全流程
+    - `PEMS-BAY` 全流程
+    - `PEMS-BAY` 前置教师训练与教师测试
+    - 关键输出文件的中文解释
+    - `CCKD-v3`
+    - `w/o confidence v3`
+    - `w/o curriculum v3`
+    - benchmark / compare / collect_results / efficiency tradeoff
+- 对外文献参考建议：
+  - 最接近当前主题的参考写作模板优先考虑“Traffic prediction + Knowledge Distillation”方向文献
+  - 重点不是照搬对方方法，而是参考其“摘要-引言-相关工作-方法-实验-消融-结论”的组织方式
