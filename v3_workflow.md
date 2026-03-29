@@ -270,6 +270,7 @@ python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/
 ### 3. 训练 CCKD-v3
 
 ```powershell
+train_total=1.7376, train_mae=1.9513, val_total=1.5261, val_mae=1.9169, soft=1.2391, conf_keep=0.5262, visible_h=12, val_latency=251.93ms, time=232.14s
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_keep_ratio 0.7 --exp_name bay_student_cckd_v3
 ```
 
@@ -287,6 +288,7 @@ python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/s
 ### 4. 测试 CCKD-v3
 
 ```powershell
+average -> MAE=1.7857, MAPE=0.0414, RMSE=3.8280, params=27,404, latency=13.81ms/batch
 python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_cckd_v3_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_cckd_v3_eval
 ```
 
