@@ -122,18 +122,7 @@ python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/a
 ```
 
 ---
-###  Baseline Student 对比
-```powershell
-python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 1.0 --soft_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --disable_confidence_filter --disable_curriculum --exp_name bay_student_baseline
-### 测试 
-python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_baseline_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_baseline_eval
-```
-###  Vanilla KD 只保留软蒸馏
-```powershell
-python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --feature_weight 0.0 --relation_weight 0.0 --disable_confidence_filter --disable_curriculum --exp_name bay_student_vanilla_kd
-### 测试
-python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_vanilla_kd_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_vanilla_kd_eval
-```
+
 - `Teacher`
 - `Baseline Student`
 - `Vanilla KD`
@@ -302,18 +291,33 @@ python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/
   中文解释：学生模型真实值和预测值的数值输出表。
 
 ---
+###  Baseline Student 对比
+```powershell
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 1.0 --soft_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --disable_confidence_filter --disable_curriculum --exp_name bay_student_baseline
+### 测试 
+average -> MAE=1.7706, MAPE=0.0411, RMSE=3.8526, params=27,404, latency=17.03ms/batch
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_baseline_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_baseline_eval
+```
+###  Vanilla KD 只保留软蒸馏
+```powershell
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --feature_weight 0.0 --relation_weight 0.0 --disable_confidence_filter --disable_curriculum --exp_name bay_student_vanilla_kd
+### 测试
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_vanilla_kd_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_vanilla_kd_eval
+```
 
 ### 5. 消融：去掉可信度筛选
 
 #### 训练
 
 ```powershell
+[Epoch 050] train_total=1.9123, train_mae=1.9442, val_total=1.7684, val_mae=1.8995, soft=1.8380, conf_keep=0.5262, visible_h=12, val_latency=246.49ms, time=226.80s
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_keep_ratio 0.7 --disable_confidence_filter --exp_name bay_student_wo_confidence_v3
 ```
 
 #### 测试
 
 ```powershell
+ average -> MAE=1.7722, MAPE=0.0404, RMSE=3.7764, params=27,404, latency=14.76ms/batch
 python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_wo_confidence_v3_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_wo_confidence_v3_eval
 ```
 
@@ -324,6 +328,7 @@ python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/
 #### 训练
 
 ```powershell
+
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_keep_ratio 0.7 --disable_curriculum --exp_name bay_student_wo_curriculum_v3
 ```
 
