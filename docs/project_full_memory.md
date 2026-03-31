@@ -730,6 +730,81 @@ python scripts/sanity_check.py
   - removing curriculum also hurts MAE
 - By MAE, curriculum contributes slightly more than confidence filtering in the current setting, but both are useful.
 
+## 2026-03-30 v4 Branch Direction
+
+- The user created a new `v4` branch after advisor feedback on `CCKD-v3`.
+- Advisor concern:
+  - binary confidence filtering looked too much like an engineering trick
+  - low-confidence positions should not simply stop receiving teacher guidance
+- New v4 method direction:
+  - keep hard supervision
+  - keep curriculum distillation
+  - replace binary confidence filtering with a more academic dual-path mechanism
+  - high-confidence positions use absolute-value distillation
+  - low-confidence positions use trend distillation instead of being discarded from teacher guidance
+
+## 2026-03-30 v4 Core Method Definition
+
+- Method name:
+  - `CCKD-v4`
+- Core idea:
+  - `L_hard`: supervision from real labels
+  - `L_abs`: absolute prediction distillation on high-confidence positions
+  - `L_trend`: trend distillation on low-confidence positions
+  - `M_curr`: curriculum mask over horizons
+- Conceptual form:
+  - `L = alpha * L_hard + beta * M_curr * [ c * L_abs + lambda * (1 - c) * L_trend ]`
+- This is no longer a simple "distill or drop" strategy.
+- This is now a confidence-adaptive dual-path curriculum distillation framework.
+
+## 2026-03-30 v4 Code Changes Applied
+
+- Updated:
+  - `losses/distillation.py`
+  - `engine.py`
+  - `train_student_kd.py`
+- Main implementation changes:
+  - binary confidence filtering replaced by continuous confidence scoring
+  - high-confidence branch uses absolute-value distillation
+  - low-confidence branch uses trend distillation
+  - curriculum remains active
+  - feature and relation distillation remain disabled by default
+- Student best checkpoint selection still uses `val_mae`
+
+## 2026-03-30 v4 Root Documents Added
+
+- Branch notes:
+  - `v4_branch_notes.md`
+- Workflow:
+  - `v4_workflow.md`
+- AI figure prompts:
+  - `v4_ai_figure_prompts.md`
+- Paper-intro draft helper:
+  - `v4_paper_intro_for_ai.md`
+- All four v4 root documents were later rewritten into Chinese so the user can directly read, run, and reuse them for writing.
+
+## 2026-03-30 v4 Experiment Naming Rule
+
+- Recommended METR-LA names:
+  - `metr_student_baseline_v4`
+  - `metr_student_vanilla_kd_v4`
+  - `metr_student_cckd_v4`
+  - `metr_student_wo_confidence_v4`
+  - `metr_student_wo_curriculum_v4`
+- Recommended PEMS-BAY names:
+  - `bay_student_baseline_v4`
+  - `bay_student_vanilla_kd_v4`
+  - `bay_student_cckd_v4`
+  - `bay_student_wo_confidence_v4`
+  - `bay_student_wo_curriculum_v4`
+
+## 2026-03-30 v4 Execution Scope
+
+- Teacher models do not need retraining for v4 because v4 only changes the student-side distillation mechanism.
+- Baseline and Vanilla KD are still valid comparison baselines under the same teacher and student architecture.
+- New student-side v4 experiments should be rerun.
+- The recommended order is recorded in `v4_workflow.md`.
+
 ## 2026-03-24 New Workflow Document
 
 - Added a dedicated second-round workflow document:

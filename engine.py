@@ -9,7 +9,7 @@ from losses import RegressionDistillationLoss
 
 
 def prepare_batch(x, y, device):
-    """将 numpy batch 转成模型使用的张量格式。"""
+    """Convert a numpy batch into model-ready tensors."""
     inputs = torch.as_tensor(x, dtype=torch.float32, device=device).transpose(1, 3)
     targets = torch.as_tensor(y, dtype=torch.float32, device=device).transpose(1, 3)
     targets = targets[:, 0, :, :]
@@ -17,14 +17,14 @@ def prepare_batch(x, y, device):
 
 
 def count_parameters(model):
-    """统计可训练参数量。"""
+    """Count trainable parameters."""
     if model is None:
         return 0
     return sum(param.numel() for param in model.parameters() if param.requires_grad)
 
 
 class TeacherTrainer:
-    """教师模型训练器。"""
+    """Trainer wrapper for the teacher model."""
 
     def __init__(self, model, scaler, learning_rate, weight_decay, clip=5.0):
         self.model = model
@@ -72,7 +72,7 @@ class TeacherTrainer:
 
 
 class DistillationTrainer:
-    """学生蒸馏训练器。"""
+    """Trainer wrapper for student distillation."""
 
     def __init__(
         self,
@@ -84,12 +84,13 @@ class DistillationTrainer:
         weight_decay,
         hard_weight=0.7,
         soft_weight=0.3,
+        trend_weight=0.5,
         feature_weight=0.0,
         relation_weight=0.0,
         temperature=3.0,
         enable_confidence_filter=True,
         enable_curriculum=True,
-        confidence_keep_ratio=0.7,
+        confidence_power=1.0,
         clip=5.0,
     ):
         self.teacher_model = teacher_model
@@ -104,12 +105,13 @@ class DistillationTrainer:
         self.distill_loss = RegressionDistillationLoss(
             hard_weight=hard_weight,
             soft_weight=soft_weight,
+            trend_weight=trend_weight,
             feature_weight=feature_weight,
             relation_weight=relation_weight,
             temperature=temperature,
             enable_confidence_filter=enable_confidence_filter,
             enable_curriculum=enable_curriculum,
-            confidence_keep_ratio=confidence_keep_ratio,
+            confidence_power=confidence_power,
         )
 
         if self.use_feature_alignment:
@@ -131,7 +133,6 @@ class DistillationTrainer:
             param.requires_grad = False
 
     def set_epoch(self, current_epoch: int, total_epochs: int):
-        """记录当前 epoch，用于课程蒸馏。"""
         self.current_epoch = current_epoch
         self.total_epochs = max(total_epochs, 1)
 
