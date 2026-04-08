@@ -846,3 +846,44 @@ python scripts/sanity_check.py
 - 对外文献参考建议：
   - 最接近当前主题的参考写作模板优先考虑“Traffic prediction + Knowledge Distillation”方向文献
   - 重点不是照搬对方方法，而是参考其“摘要-引言-相关工作-方法-实验-消融-结论”的组织方式
+
+## 2026-04-07 Switchable Curriculum Update
+
+- The user explicitly requested that `METR-LA` keep the original curriculum behavior while `PEMS-BAY` can try a weaker optimized curriculum.
+- This has now been implemented in `v4` as a switchable curriculum design.
+
+### New CLI option
+
+- `--curriculum_mode standard|short|wide|soft`
+
+### Meaning of each mode
+
+- `standard`
+  - preserves the original METR-friendly schedule
+- `short`
+  - short warm-up, then fully open all horizons
+- `wide`
+  - opens more horizons earlier
+- `soft`
+  - keeps all horizons active with softer long-horizon weights
+
+### Files updated
+
+- [distillation.py](/C:/Users/86151/Documents/New%20project/losses/distillation.py)
+- [engine.py](/C:/Users/86151/Documents/New%20project/engine.py)
+- [train_student_kd.py](/C:/Users/86151/Documents/New%20project/train_student_kd.py)
+- [v4_workflow.md](/C:/Users/86151/Documents/New%20project/v4_workflow.md)
+- [v4_branch_notes.md](/C:/Users/86151/Documents/New%20project/v4_branch_notes.md)
+
+### Recommended usage after the update
+
+- `METR-LA`
+  - keep using `--curriculum_mode standard`
+- `PEMS-BAY`
+  - try `--curriculum_mode short` first
+  - then compare `wide` if needed
+
+### Scope note
+
+- This is a switchable extension, not a hard replacement.
+- The goal is to optimize `PEMS-BAY` without invalidating the existing METR-oriented setup.

@@ -290,6 +290,7 @@ python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/s
 测试：
 
 ```powershell
+MAE=1.7588, MAPE=0.0405, RMSE=3.7794, params=27,404, latency=17.59ms/batch
 python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_wo_curriculum_v4_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_wo_curriculum_v4_eval
 ```
 
@@ -337,6 +338,99 @@ python scripts/plot_efficiency_tradeoff.py --summary_csv outputs/reports/bay_v4_
 4. 教师自适应邻接矩阵热力图
 5. 节点关系热力图
 6. `CCKD-v4` 训练曲线图
+
+---
+
+## 课程模式切换说明
+
+为了保证 **METR-LA** 继续使用当前已经验证有效的课程蒸馏策略，同时允许 **PEMS-BAY** 使用更温和的课程策略，`v4` 现在新增了可切换参数：
+
+```powershell
+--curriculum_mode standard|short|wide|soft
+```
+
+### 各模式含义
+
+- `standard`
+  - 默认模式
+  - 保留原来的课程蒸馏逻辑
+  - **METR-LA 建议继续使用这个模式**
+
+- `short`
+  - 前期只做一个较短的课程预热，随后快速开放全部 horizon
+  - **优先推荐给 PEMS-BAY**
+
+- `wide`
+  - 前期一开始就开放更多 horizon
+  - 适合希望减少前期限制的情况
+
+- `soft`
+  - 不再硬屏蔽后面 horizon，而是用更平滑的权重逐步提升长期 horizon 的蒸馏强度
+  - 更适合后续扩展实验
+
+### 推荐使用方式
+
+#### METR-LA
+
+保持默认即可，也可以显式写出：
+
+```powershell
+--curriculum_mode standard
+```
+
+#### PEMS-BAY
+
+建议先尝试：
+
+```powershell
+--curriculum_mode short
+```
+
+如果还想进一步比较，可再试：
+
+```powershell
+--curriculum_mode wide
+```
+
+### PEMS-BAY 优化版 CCKD-v4 soft
+
+```powershell
+训练 soft 50轮 命名错误（命名成60实际为50）
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name bay_student_cckd_v4_e60_soft
+测试 MAE=1.7764, MAPE=0.0405, RMSE=3.8016, params=27,404, latency=13.95ms/batch
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_cckd_v4_e60_soft_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_cckd_v4_e60_soft_eval
+
+训练 soft 60轮
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 60 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name bay_student_cckd_v4_ee60_soft
+测试 MAE=1.7650, MAPE=0.0413, RMSE=3.8335, params=27,404, latency=13.64ms/batch
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_cckd_v4_ee60_soft_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_cckd_v4_ee60_soft_eval
+```
+
+```powershell
+训练 wide
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 60 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode wide --exp_name bay_student_cckd_v4_e60_wide
+测试 
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_cckd_v4_e60_wide_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_cckd_v4_e60_soft_eval
+```
+训练：
+
+```powershell 
+训练 short e49
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode short --exp_name bay_student_cckd_v4_short
+```
+
+测试：
+
+```powershell
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_cckd_v4_short_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_cckd_v4_short_eval
+```
+
+### 说明
+
+- 这次新增的是“**可切换课程模式**”，不是直接替换原逻辑。
+- 因此：
+  - `METR-LA` 原来的 `standard` 逻辑不受影响
+  - `PEMS-BAY` 可以单独尝试更弱的课程策略
 7. 精度-效率折中图
 
 这些图已经足够支撑：

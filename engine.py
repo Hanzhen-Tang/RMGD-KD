@@ -91,6 +91,7 @@ class DistillationTrainer:
         enable_confidence_filter=True,
         enable_curriculum=True,
         confidence_power=1.0,
+        curriculum_mode="standard",
         clip=5.0,
     ):
         self.teacher_model = teacher_model
@@ -112,6 +113,7 @@ class DistillationTrainer:
             enable_confidence_filter=enable_confidence_filter,
             enable_curriculum=enable_curriculum,
             confidence_power=confidence_power,
+            curriculum_mode=curriculum_mode,
         )
 
         if self.use_feature_alignment:

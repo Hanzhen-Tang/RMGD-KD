@@ -137,3 +137,22 @@ L = alpha * L_hard + beta * M_curr * [ c * L_abs + lambda * (1 - c) * L_trend ]
 
 - `v4` 只修改了学生端的蒸馏机制，所以**教师模型不需要重训**
 - 但 `v4` 的学生方法属于新方法，所以**学生侧方法需要重新训练**
+
+## 2026-04-07 课程蒸馏可切换升级
+
+为避免 `PEMS-BAY` 上较强课程蒸馏限制前期学习，同时不影响 `METR-LA` 已验证有效的默认策略，`v4` 继续升级为“可切换课程模式”版本：
+
+- 新增参数：
+  - `--curriculum_mode standard|short|wide|soft`
+- 默认值：
+  - `standard`
+- 设计原则：
+  - `METR-LA` 保持原来的 `standard`
+  - `PEMS-BAY` 可以尝试 `short` / `wide` / `soft`
+
+当前最推荐的使用方式：
+
+- `METR-LA`
+  - `--curriculum_mode standard`
+- `PEMS-BAY`
+  - 优先试 `--curriculum_mode short`

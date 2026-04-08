@@ -38,6 +38,12 @@ def parse_args():
     parser.add_argument("--relation_weight", type=float, default=0.0)
     parser.add_argument("--temperature", type=float, default=3.0)
     parser.add_argument("--confidence_power", type=float, default=1.0)
+    parser.add_argument(
+        "--curriculum_mode",
+        type=str,
+        default="standard",
+        choices=["standard", "short", "wide", "soft"],
+    )
     parser.add_argument("--disable_confidence_filter", action="store_true")
     parser.add_argument(
         "--disable_reliability",
@@ -130,6 +136,7 @@ def main():
         enable_confidence_filter=not args.disable_confidence_filter,
         enable_curriculum=not args.disable_curriculum,
         confidence_power=args.confidence_power,
+        curriculum_mode=args.curriculum_mode,
     )
 
     teacher_params = count_parameters(teacher)
@@ -170,7 +177,7 @@ def main():
     )
     print(
         f"[{METHOD_NAME}] teacher_params={teacher_params:,}, student_params={student_params:,}, "
-        f"compression_ratio={compression_ratio:.2f}x"
+        f"compression_ratio={compression_ratio:.2f}x, curriculum_mode={args.curriculum_mode}"
     )
 
     for epoch in range(1, args.epochs + 1):
@@ -202,7 +209,7 @@ def main():
                     f"total={metrics['loss']:.4f}, hard={metrics['hard_loss']:.4f}, "
                     f"soft={metrics['soft_loss']:.4f}, abs={metrics['absolute_loss']:.4f}, "
                     f"trend={metrics['trend_loss']:.4f}, mean_conf={metrics['confidence_keep_ratio']:.4f}, "
-                    f"visible_h={metrics['visible_horizon']}"
+                    f"visible_h={metrics['visible_horizon']}, curriculum={metrics['curriculum_mode']}"
                 )
 
         val_losses, val_maes, val_mapes, val_rmses, val_latencies = [], [], [], [], []
@@ -260,7 +267,7 @@ def main():
             f"val_total={mean_val_loss:.4f}, val_mae={mean_val_mae:.4f}, "
             f"abs={history['absolute_loss'][-1]:.4f}, trend={history['trend_loss'][-1]:.4f}, "
             f"mean_conf={history['mean_confidence'][-1]:.4f}, trend_ratio={history['trend_ratio'][-1]:.4f}, "
-            f"visible_h={last_visible_horizon}, val_latency={mean_val_latency:.2f}ms, "
+            f"visible_h={last_visible_horizon}, curriculum={args.curriculum_mode}, val_latency={mean_val_latency:.2f}ms, "
             f"time={time.time() - epoch_start:.2f}s"
         )
 
@@ -297,6 +304,7 @@ def main():
             "relation_weight": args.relation_weight,
             "temperature": args.temperature,
             "confidence_power": args.confidence_power,
+            "curriculum_mode": args.curriculum_mode,
             "disable_confidence_filter": args.disable_confidence_filter,
             "disable_curriculum": args.disable_curriculum,
             "teacher_params": teacher_params,

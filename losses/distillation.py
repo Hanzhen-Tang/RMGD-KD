@@ -8,7 +8,7 @@ from utils.metrics import masked_mae
 
 
 def _build_valid_mask(real_value: torch.Tensor, null_val: float = 0.0, eps: float = 1e-6) -> torch.Tensor:
-    """构建有效位置掩码，避免无效值污染蒸馏统计。"""
+    """Build a float mask for valid regression targets."""
     if isinstance(null_val, float) and math.isnan(null_val):
         valid_mask = ~torch.isnan(real_value)
     else:
@@ -17,17 +17,14 @@ def _build_valid_mask(real_value: torch.Tensor, null_val: float = 0.0, eps: floa
 
 
 def _masked_reduce_mean(value: torch.Tensor, mask: torch.Tensor, dim, keepdim: bool = True) -> torch.Tensor:
-    """安全地计算带掩码平均值。"""
+    """Compute a masked mean along the provided dimensions."""
     numerator = (value * mask).sum(dim=dim, keepdim=keepdim)
     denominator = mask.sum(dim=dim, keepdim=keepdim).clamp_min(1.0)
     return numerator / denominator
 
 
 def _normalize_to_confidence(error_map: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
-    """
-    将误差映射为 [0, 1] 的连续可信度。
-    误差越小，可信度越高。
-    """
+    """Convert an error map into a [0, 1] confidence map."""
     flat_error = error_map.reshape(-1)
     min_error = flat_error.min()
     max_error = flat_error.max()
@@ -44,18 +41,15 @@ def compute_confidence_score(
     confidence_power: float = 1.0,
 ):
     """
-    连续可信度估计：
-    - 先按节点维、horizon 维统计教师误差
-    - 再将误差映射成 [0, 1] 的连续可信度
-    - 最终得到节点-预测步联合可信度分数
+    Build continuous confidence scores from masked teacher prediction errors.
 
     teacher_pred / real_value: [B, 1, N, H]
     """
     valid_mask = _build_valid_mask(real_value.detach(), null_val=null_val)
     teacher_error = torch.abs(teacher_pred.detach() - real_value.detach())
 
-    node_error = _masked_reduce_mean(teacher_error, valid_mask, dim=(0, 1, 3), keepdim=True)  # [1,1,N,1]
-    horizon_error = _masked_reduce_mean(teacher_error, valid_mask, dim=(0, 1, 2), keepdim=True)  # [1,1,1,H]
+    node_error = _masked_reduce_mean(teacher_error, valid_mask, dim=(0, 1, 3), keepdim=True)
+    horizon_error = _masked_reduce_mean(teacher_error, valid_mask, dim=(0, 1, 2), keepdim=True)
 
     node_confidence = _normalize_to_confidence(node_error)
     horizon_confidence = _normalize_to_confidence(horizon_error)
@@ -75,26 +69,64 @@ def compute_confidence_score(
     }
 
 
-def compute_curriculum_map(horizon_count: int, current_epoch: int, total_epochs: int, device) -> torch.Tensor:
-    """多步预测课程蒸馏：由短期到长期逐步开放 horizon。"""
-    if total_epochs <= 0:
-        visible_horizon = horizon_count
-    else:
-        progress = current_epoch / total_epochs
+def compute_curriculum_map(
+    horizon_count: int,
+    current_epoch: int,
+    total_epochs: int,
+    device,
+    mode: str = "standard",
+):
+    """
+    Build a switchable curriculum schedule.
+
+    Modes:
+    - standard: original METR-friendly schedule
+    - short: short warm-up then fully open
+    - wide: expose more horizons early
+    - soft: all horizons active, but long horizons start with smaller weights
+    """
+    progress = 1.0 if total_epochs <= 0 else current_epoch / total_epochs
+    curriculum_map = torch.ones((1, 1, 1, horizon_count), device=device)
+
+    if mode == "standard":
         if progress <= 1 / 3:
             visible_horizon = max(1, horizon_count // 3)
         elif progress <= 2 / 3:
             visible_horizon = max(1, (2 * horizon_count) // 3)
         else:
             visible_horizon = horizon_count
+        curriculum_map = torch.zeros((1, 1, 1, horizon_count), device=device)
+        curriculum_map[..., :visible_horizon] = 1.0
+    elif mode == "short":
+        if progress <= 0.2:
+            visible_horizon = max(1, horizon_count // 2)
+            curriculum_map = torch.zeros((1, 1, 1, horizon_count), device=device)
+            curriculum_map[..., :visible_horizon] = 1.0
+        else:
+            visible_horizon = horizon_count
+    elif mode == "wide":
+        if progress <= 1 / 3:
+            visible_horizon = max(1, (2 * horizon_count) // 3)
+            curriculum_map = torch.zeros((1, 1, 1, horizon_count), device=device)
+            curriculum_map[..., :visible_horizon] = 1.0
+        else:
+            visible_horizon = horizon_count
+    elif mode == "soft":
+        visible_horizon = horizon_count
+        if progress <= 0.5:
+            min_weight = 0.4 + 0.6 * (progress / 0.5)
+        else:
+            min_weight = 1.0
+        weights = torch.linspace(min_weight, 1.0, steps=horizon_count, device=device)
+        curriculum_map = weights.view(1, 1, 1, horizon_count)
+    else:
+        raise ValueError(f"Unsupported curriculum mode: {mode}")
 
-    curriculum_map = torch.zeros((1, 1, 1, horizon_count), device=device)
-    curriculum_map[..., :visible_horizon] = 1.0
-    return curriculum_map
+    return curriculum_map, visible_horizon
 
 
 def compute_relation_matrix(node_feature: torch.Tensor) -> torch.Tensor:
-    """保留旧接口，兼容已有代码与分析脚本。"""
+    """Build a pairwise node relation matrix from hidden features."""
     if node_feature.size(-1) > 1:
         pooled_feature = node_feature.mean(dim=-1)
     else:
@@ -108,7 +140,7 @@ def compute_relation_matrix(node_feature: torch.Tensor) -> torch.Tensor:
 
 class RegressionDistillationLoss(nn.Module):
     """
-    v4 默认目标：
+    v4 distillation loss:
     - hard supervision
     - confidence-aware absolute distillation
     - low-confidence trend distillation
@@ -126,6 +158,7 @@ class RegressionDistillationLoss(nn.Module):
         enable_curriculum=True,
         confidence_power=1.0,
         trend_weight=0.5,
+        curriculum_mode="standard",
     ):
         super().__init__()
         self.hard_weight = hard_weight
@@ -137,6 +170,7 @@ class RegressionDistillationLoss(nn.Module):
         self.enable_curriculum = enable_curriculum
         self.confidence_power = confidence_power
         self.trend_weight = trend_weight
+        self.curriculum_mode = curriculum_mode
 
     def forward(
         self,
@@ -165,14 +199,16 @@ class RegressionDistillationLoss(nn.Module):
             confidence_score = valid_mask
 
         if self.enable_curriculum:
-            curriculum_map = compute_curriculum_map(
+            curriculum_map, visible_horizon = compute_curriculum_map(
                 horizon_count=student_pred.size(-1),
                 current_epoch=current_epoch,
                 total_epochs=total_epochs,
                 device=student_pred.device,
+                mode=self.curriculum_mode,
             )
         else:
             curriculum_map = torch.ones((1, 1, 1, student_pred.size(-1)), device=student_pred.device)
+            visible_horizon = student_pred.size(-1)
 
         absolute_mask = confidence_score * curriculum_map
         if absolute_mask.sum().detach().item() <= 0:
@@ -202,8 +238,9 @@ class RegressionDistillationLoss(nn.Module):
             else:
                 trend_loss = torch.zeros(1, device=student_pred.device, dtype=student_pred.dtype).squeeze()
         else:
-            trend_loss = torch.zeros(1, device=student_pred.device, dtype=student_pred.dtype).squeeze()
+            trend_valid_mask = torch.zeros_like(student_pred[..., :0])
             trend_mask = torch.zeros_like(student_pred[..., :0])
+            trend_loss = torch.zeros(1, device=student_pred.device, dtype=student_pred.dtype).squeeze()
 
         combined_soft_loss = (absolute_loss + self.trend_weight * trend_loss) / (1.0 + self.trend_weight)
 
@@ -226,7 +263,6 @@ class RegressionDistillationLoss(nn.Module):
             + self.relation_weight * relation_loss
         )
 
-        visible_horizon = int(curriculum_map.sum().item())
         mean_node_confidence = confidence_items["node_confidence"].mean().item()
         mean_horizon_confidence = confidence_items["horizon_confidence"].mean().item()
         mean_trend_ratio = (
@@ -249,4 +285,5 @@ class RegressionDistillationLoss(nn.Module):
             "trend_ratio": mean_trend_ratio,
             "confidence_enabled": int(self.enable_confidence_filter),
             "curriculum_enabled": int(self.enable_curriculum),
+            "curriculum_mode": self.curriculum_mode,
         }
