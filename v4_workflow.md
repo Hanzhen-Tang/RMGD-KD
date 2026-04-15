@@ -313,7 +313,8 @@ python scripts/benchmark_model.py --device cuda:0 --data data/PEMS-BAY --adjdata
 ```powershell
 python compare_teacher_student.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --student_checkpoint checkpoints/student/bay_student_cckd_v4_best.pt --plot_sensor 10 --plot_horizon 11 --exp_name bay_compare_cckd_v4
 ```
-
+comparison_figure=outputs\figures\bay_compare_cckd_v4_sensor10_h12.png
+comparison_csv=outputs\predictions\bay_compare_cckd_v4_sensor10_h12.csv
 ### 13. 汇总结果表
 
 ```powershell
@@ -338,6 +339,8 @@ python scripts/plot_efficiency_tradeoff.py --summary_csv outputs/reports/bay_v4_
 4. 教师自适应邻接矩阵热力图
 5. 节点关系热力图
 6. `CCKD-v4` 训练曲线图
+
+
 
 ---
 
