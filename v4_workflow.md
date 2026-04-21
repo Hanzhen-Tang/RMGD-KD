@@ -442,3 +442,8 @@ python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/
 - 定性分析
 - 效率讨论
 - 论文写作与答辩展示
+
+```powershell
+METR-LA 教师误差热力图 可信度热力图
+python scripts/generate_distillation_heatmap.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --mode both --node_limit 48 --node_select top_error --exp_name metr_distill
+```
