@@ -887,3 +887,33 @@ python scripts/sanity_check.py
 
 - This is a switchable extension, not a hard replacement.
 - The goal is to optimize `PEMS-BAY` without invalidating the existing METR-oriented setup.
+
+## 2026-04-15 README rewrite
+
+The project `README.md` has been fully rewritten to match the current stabilized paper line.
+
+### Current README positioning
+
+- The README now uses **CCKD-v5** as the paper-facing main method name.
+- It no longer follows the original RMGD-KD workflow.
+- It presents the project as:
+  - `Confidence-Adaptive Distillation`
+  - `Soft Curriculum`
+  - `GWNet teacher + lightweight GCN student`
+
+### What the new README contains
+
+- project overview and contributions
+- environment setup
+- data preparation
+- version notes
+- full METR-LA workflow
+- full PEMS-BAY workflow
+- curriculum mode explanation
+- plotting / benchmarking / summary commands
+- paper writing pointers and linked v5 docs
+
+### Important note
+
+- The README now serves as the main operational guide.
+- Older v2/v3/v4 workflow documents may still exist for history, but the new README is the recommended entry point.
