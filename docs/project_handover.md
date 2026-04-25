@@ -46,13 +46,19 @@ This is the main innovation.
 Key logic:
 
 - Estimate teacher knowledge confidence from teacher prediction error against ground-truth labels.
-- High-confidence regions use **absolute-value distillation**.
-- Low-confidence regions use **trend distillation**.
+- Map teacher error into a continuous confidence score `c in [0, 1]`.
+- Use **soft routing**, not a hard threshold.
+- Absolute-value distillation is weighted by `c`.
+- Trend distillation is weighted by `1 - c`.
+- High-confidence regions therefore emphasize absolute-value distillation.
+- Low-confidence regions therefore emphasize trend distillation.
 - Low-confidence regions are **not discarded**; instead, they use a more robust trend-transfer path.
 
 Correct interpretation:
 
 - This is **not** simple filtering.
+- This is **not** a binary rule such as `c > 0.5` for absolute distillation and `c < 0.5` for trend distillation.
+- For each node-horizon position, both paths can contribute; confidence only changes their relative weights.
 - This is **confidence-guided differentiated distillation**.
 
 ### 3.3 Soft Curriculum Over Horizons

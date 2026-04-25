@@ -749,12 +749,14 @@ python scripts/sanity_check.py
   - `CCKD-v4`
 - Core idea:
   - `L_hard`: supervision from real labels
-  - `L_abs`: absolute prediction distillation on high-confidence positions
-  - `L_trend`: trend distillation on low-confidence positions
+  - `L_abs`: absolute prediction distillation weighted by continuous confidence `c`
+  - `L_trend`: trend distillation weighted by the complementary term `1 - c`
   - `M_curr`: curriculum mask over horizons
 - Conceptual form:
   - `L = alpha * L_hard + beta * M_curr * [ c * L_abs + lambda * (1 - c) * L_trend ]`
 - This is no longer a simple "distill or drop" strategy.
+- This is not a hard threshold rule such as `c > 0.5` for absolute distillation and `c < 0.5` for trend distillation.
+- For each node-horizon position, both paths can contribute; confidence only changes their relative weights.
 - This is now a confidence-adaptive dual-path curriculum distillation framework.
 
 ## 2026-03-30 v4 Code Changes Applied
