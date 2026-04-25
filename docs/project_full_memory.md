@@ -917,3 +917,63 @@ The project `README.md` has been fully rewritten to match the current stabilized
 
 - The README now serves as the main operational guide.
 - Older v2/v3/v4 workflow documents may still exist for history, but the new README is the recommended entry point.
+
+## 2026-04-21 Distillation Heatmap Script Added
+
+- Added a dedicated analysis script for paper-ready distillation visualizations:
+  - [generate_distillation_heatmap.py](/C:/Users/86151/Documents/New%20project/scripts/generate_distillation_heatmap.py)
+
+### Purpose
+
+- Support the paper's visualization section with real analysis figures instead of schematic drawings.
+- Provide two heatmap types that directly serve the CCKD method motivation:
+  - `teacher_error`
+    - visualizes teacher prediction error across nodes and forecast horizons
+    - useful for showing that teacher knowledge quality is heterogeneous
+  - `confidence`
+    - visualizes confidence scores across nodes and forecast horizons
+    - useful for showing the confidence-adaptive distillation pattern
+
+### Current behavior
+
+- Accepts a teacher checkpoint and test dataset input.
+- Runs the teacher model on the test set.
+- Aggregates results into a node-by-horizon matrix.
+- Supports:
+  - `--mode teacher_error`
+  - `--mode confidence`
+  - `--mode both`
+- Saves both figures and CSV matrices for later plotting refinement.
+
+### Output locations
+
+- Figures:
+  - `outputs/figures/*_teacher_error_heatmap.png`
+  - `outputs/figures/*_confidence_heatmap.png`
+- Exported matrices:
+  - `outputs/reports/*_teacher_error_heatmap.csv`
+  - `outputs/reports/*_confidence_heatmap.csv`
+
+### Recommended paper usage
+
+- Prefer adding at least one of the following in the visualization section:
+  - `Teacher Prediction Error Heatmap`
+  - `Confidence Heatmap`
+- If only one heatmap is included in the main paper, `teacher_error` is the first recommendation because it more directly supports the motivation that teacher knowledge quality is heterogeneous.
+
+### Example usage
+
+- METR-LA:
+  - `python scripts/generate_distillation_heatmap.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --mode both --node_limit 48 --node_select top_error --exp_name metr_distill`
+- PEMS-BAY:
+  - `python scripts/generate_distillation_heatmap.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --mode both --node_limit 48 --node_select top_error --exp_name bay_distill`
+## 2026-04-23 Project Handover Document Added
+
+- Added a dedicated handover document for cross-session or cross-account continuity:
+  - [project_handover.md](/C:/Users/86151/Documents/New%20project/docs/project_handover.md)
+- Purpose:
+  - summarize the current paper title, method positioning, figure strategy, formula constraints, experiment strategy, and next steps
+  - provide a compact “resume prompt” for future sessions if conversation memory is unavailable
+- This document is different from `project_full_memory.md`:
+  - `project_full_memory.md` remains the long-form evolving project memory
+  - `project_handover.md` is the current-state quick handoff document
