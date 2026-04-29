@@ -117,7 +117,9 @@ def compute_curriculum_map(
             min_weight = 0.4 + 0.6 * (progress / 0.5)
         else:
             min_weight = 1.0
-        weights = torch.linspace(min_weight, 1.0, steps=horizon_count, device=device)
+        # Keep all horizons active. Early training emphasizes short horizons,
+        # while long-horizon weights smoothly rise as training progresses.
+        weights = torch.linspace(1.0, min_weight, steps=horizon_count, device=device)
         curriculum_map = weights.view(1, 1, 1, horizon_count)
     else:
         raise ValueError(f"Unsupported curriculum mode: {mode}")

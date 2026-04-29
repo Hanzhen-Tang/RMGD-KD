@@ -1,6 +1,6 @@
 # Current State - Read This First
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 This file is the long historical memory of the project. It contains older notes, including abandoned `RMGD-KD`, `v2`, `v3`, `v4`, and version-name discussions. A future model must not treat the early historical sections as the current method definition.
 
@@ -11,6 +11,7 @@ Current paper goal:
 - Chinese academic paper on lightweight traffic forecasting with knowledge distillation.
 - Teacher: `GWNet Teacher`.
 - Student: `Lightweight GCN Student`.
+- Additional v6 generalization students: `Lightweight TCN Student` and `Lightweight GRU Student`.
 - Final deployed/inference model: student only.
 - Main contribution 1: confidence-adaptive dual-path distillation.
 - Main contribution 2: soft curriculum weighting over forecasting horizons.
@@ -45,7 +46,7 @@ Current curriculum warning:
 - Current code supports `curriculum_mode = standard | short | wide | soft`.
 - Current script default is `standard`, which contains hard horizon opening.
 - If the final paper claims all horizons are always active, final experiments should use `--curriculum_mode soft` or code should be adjusted.
-- Verify that the direction of `soft` weights matches the paper figure and text before final submission.
+- v6 fixed the `soft` curriculum direction so early training emphasizes short horizons and long-horizon weights gradually increase.
 
 Current figure set:
 
@@ -60,8 +61,18 @@ Current experiment/table plan:
 - Table 2: main results on `METR-LA` and `PEMS-BAY`.
 - Table 3: accuracy-efficiency comparison, including deploy model, parameters, inference time.
 - Table 4: ablation study.
-- Optional Table 5: advisor-suggested generalization experiment across another lightweight student or teacher-student pair.
+- Optional Table 5: v6 advisor-suggested generalization experiment using `Lightweight TCN Student` and `Lightweight GRU Student`.
 - Optional Table 6: curriculum or hyperparameter sensitivity.
+
+Current v6 update:
+
+- Added `models/student_tcn.py`.
+- Added `models/student_gru.py`.
+- Added `--student_model gcn|tcn|gru` to `train_student_kd.py`.
+- Updated testing, comparison, benchmarking, and result collection scripts to rebuild the student architecture from checkpoint metadata.
+- Added root document `v6_generalization_experiment.md`.
+- The v6 experiment requires 12 new generalization runs: TCN/GRU Student only, TCN/GRU Vanilla KD, and TCN/GRU CCKD on both `METR-LA` and `PEMS-BAY`.
+- The goal is to show that CCKD improves additional lightweight students, not just the original GCN student.
 
 Current paper draft review:
 

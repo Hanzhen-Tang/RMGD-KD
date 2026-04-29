@@ -5,7 +5,7 @@ import torch
 
 import util
 from engine import count_parameters, prepare_batch
-from model import GWNetTeacher, SimpleGCNStudent
+from model import GWNetTeacher, build_student_from_checkpoint
 
 
 def parse_args():
@@ -41,17 +41,7 @@ def build_model(args, ckpt, device, supports):
             end_channels=ckpt["nhid"] * 16,
         ).to(device)
     else:
-        model = SimpleGCNStudent(
-            num_nodes=ckpt["num_nodes"],
-            in_dim=ckpt["in_dim"],
-            hidden_dim=ckpt["student_hidden_dim"],
-            out_dim=ckpt["seq_length"],
-            dropout=ckpt["dropout"],
-            support_len=len(supports),
-            gcn_order=ckpt["student_order"],
-            graph_layers=ckpt["student_layers"],
-            input_seq_len=ckpt["input_seq_len"],
-        ).to(device)
+        model = build_student_from_checkpoint(ckpt, supports, device)
 
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
@@ -95,6 +85,8 @@ def main():
         latencies.append((time.perf_counter() - start) * 1000.0)
 
     print(f"model_type={args.model_type}")
+    if args.model_type == "student":
+        print(f"student_model={ckpt.get('student_model', 'gcn')}")
     print(f"params={params:,}")
     print(f"avg_latency_ms={sum(latencies) / len(latencies):.4f}")
     print(f"batch_size={args.batch_size}")

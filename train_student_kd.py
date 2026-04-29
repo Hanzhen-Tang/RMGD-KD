@@ -8,15 +8,15 @@ import torch
 
 import util
 from engine import DistillationTrainer, count_parameters, prepare_batch
-from model import GWNetTeacher, SimpleGCNStudent
+from model import GWNetTeacher, STUDENT_MODEL_CHOICES, build_student_model
 from utils.plotting import plot_training_curves, save_history
 
 
-METHOD_NAME = "CCKD-v4"
+METHOD_NAME = "CCKD"
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train the v4 student distillation method.")
+    parser = argparse.ArgumentParser(description="Train the CCKD student distillation method.")
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--data", type=str, default="data/METR-LA")
     parser.add_argument("--adjdata", type=str, default="data/sensor_graph/adj_mx.pkl")
@@ -30,6 +30,7 @@ def parse_args():
     parser.add_argument("--student_hidden_dim", type=int, default=32)
     parser.add_argument("--student_layers", type=int, default=2)
     parser.add_argument("--student_order", type=int, default=2)
+    parser.add_argument("--student_model", type=str, default="gcn", choices=STUDENT_MODEL_CHOICES)
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--hard_weight", type=float, default=0.7)
     parser.add_argument("--soft_weight", type=float, default=0.3)
@@ -108,7 +109,8 @@ def main():
     seq_length = dataloader["y_train"].shape[1]
     input_seq_len = dataloader["x_train"].shape[1]
 
-    student = SimpleGCNStudent(
+    student = build_student_model(
+        student_model=args.student_model,
         num_nodes=num_nodes,
         in_dim=in_dim,
         hidden_dim=args.student_hidden_dim,
@@ -173,7 +175,8 @@ def main():
 
     print(
         f"[{METHOD_NAME}] start training | num_nodes={num_nodes}, in_dim={in_dim}, "
-        f"horizon={seq_length}, student_hidden={args.student_hidden_dim}, device={device}"
+        f"horizon={seq_length}, student_model={args.student_model}, "
+        f"student_hidden={args.student_hidden_dim}, device={device}"
     )
     print(
         f"[{METHOD_NAME}] teacher_params={teacher_params:,}, student_params={student_params:,}, "
@@ -290,6 +293,7 @@ def main():
             "in_dim": in_dim,
             "seq_length": seq_length,
             "input_seq_len": input_seq_len,
+            "student_model": args.student_model,
             "student_hidden_dim": args.student_hidden_dim,
             "student_layers": args.student_layers,
             "student_order": args.student_order,

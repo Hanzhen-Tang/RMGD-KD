@@ -9,7 +9,7 @@ import torch
 import util
 from engine import count_parameters, prepare_batch
 from losses.distillation import compute_relation_matrix
-from model import GWNetTeacher, SimpleGCNStudent
+from model import GWNetTeacher, build_student_from_checkpoint
 from utils.plotting import plot_heatmap, plot_prediction_curve
 
 
@@ -55,17 +55,7 @@ def build_model(args, ckpt, device, supports):
             end_channels=ckpt["nhid"] * 16,
         ).to(device)
     else:
-        model = SimpleGCNStudent(
-            num_nodes=ckpt["num_nodes"],
-            in_dim=ckpt["in_dim"],
-            hidden_dim=ckpt["student_hidden_dim"],
-            out_dim=ckpt["seq_length"],
-            dropout=ckpt["dropout"],
-            support_len=len(supports),
-            gcn_order=ckpt["student_order"],
-            graph_layers=ckpt["student_layers"],
-            input_seq_len=ckpt["input_seq_len"],
-        ).to(device)
+        model = build_student_from_checkpoint(ckpt, supports, device)
 
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()

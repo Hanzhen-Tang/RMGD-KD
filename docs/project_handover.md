@@ -1,6 +1,6 @@
 # CCKD Paper Handover - Current State
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 This document is the quick handover file for a future model or a new account with no chat memory. Read this file first. The longer file `docs/project_full_memory.md` contains historical development notes, including abandoned versions, so its older sections must not override this current-state handover.
 
@@ -33,6 +33,13 @@ Student:
 - `Lightweight GCN Student`
 - Final deployable model.
 - Only the student is used during inference.
+
+Additional v6 generalization students:
+
+- `Lightweight TCN Student`
+- `Lightweight GRU Student`
+- Added only for teacher-student generalization experiments.
+- They are not meant to replace the main GCN student in the core paper story.
 
 Training framework:
 
@@ -106,7 +113,7 @@ Implementation warning:
 - Current training script default is `standard`.
 - `standard`, `short`, and `wide` contain hard horizon opening behavior.
 - If the final paper claims that all horizons are always active, final experiments should use `--curriculum_mode soft` or the code should be adjusted to match the paper.
-- Also verify the direction of the `soft` weights before final submission; the code should match the figure and text claim that short-term horizons are emphasized early and long-term weights gradually increase.
+- v6 fixed the `soft` weight direction so short-term horizons are emphasized early and long-term weights gradually increase.
 
 ## 5. Formula Notes
 
@@ -190,8 +197,10 @@ Classical model comparison:
 Generalization experiment suggested by the advisor:
 
 - Purpose: show that CCKD is not only effective for one teacher-student pair.
-- Minimum-cost design: keep `GWNet Teacher`, add one additional lightweight student, and compare `Student only`, `Vanilla KD`, and `CCKD` on at least `METR-LA`.
-- Better design: run the same on both `METR-LA` and `PEMS-BAY`.
+- v6 added `Lightweight TCN Student` and `Lightweight GRU Student` for this experiment.
+- Medium-cost design: keep `GWNet Teacher`, use two additional lightweight students, and compare `Student only`, `Vanilla KD`, and `CCKD` on both `METR-LA` and `PEMS-BAY`.
+- This gives 12 generalization runs: 2 datasets x 2 extra students x 3 training strategies.
+- This requires 6 new training runs.
 - Do not expand to unrelated domains such as image classification unless the project scope changes.
 
 ## 8. Paper Draft Status
@@ -228,6 +237,9 @@ Important files:
 - `scripts/generate_distillation_heatmap.py`: teacher error and confidence heatmaps.
 - `scripts/benchmark_model.py`: parameter and inference speed benchmarking.
 - `scripts/plot_efficiency_tradeoff.py`: accuracy-efficiency figure support.
+- `models/student_tcn.py`: lightweight TCN student added for v6 generalization experiments.
+- `models/student_gru.py`: lightweight GRU student added for v6 generalization experiments.
+- `v6_generalization_experiment.md`: root-level v6 change notes and runnable experiment commands.
 - `docs/project_full_memory.md`: long historical memory; older sections may be outdated.
 - `docs/project_handover.md`: current quick handover; this file should be trusted first.
 
@@ -235,11 +247,11 @@ Important files:
 
 Recommended next steps:
 
-1. Decide whether final experiments use `curriculum_mode=soft`; if yes, verify or fix the direction of soft curriculum weights.
+1. Run the 12 v6 TCN/GRU generalization experiments in `v6_generalization_experiment.md`.
 2. Align the paper formulas with `losses/distillation.py`.
 3. Update the GPT draft according to formula and curriculum corrections.
 4. Fill real results in the four required tables.
-5. Consider the small generalization experiment suggested by the advisor.
+5. Add the v6 generalization table if results support the claim.
 6. Finalize the four figures.
 7. Convert final equations into MathType.
 8. Replace citation placeholders with real references.

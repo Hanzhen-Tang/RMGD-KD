@@ -11,7 +11,7 @@ import torch
 
 import util
 from engine import prepare_batch
-from model import GWNetTeacher, SimpleGCNStudent
+from model import GWNetTeacher, build_student_from_checkpoint
 
 PAPER_REAL_COLOR = "#4D4D4D"
 PAPER_TEACHER_COLOR = "#0072B2"
@@ -62,17 +62,7 @@ def build_teacher(ckpt, device, supports):
 
 
 def build_student(ckpt, device, supports):
-    model = SimpleGCNStudent(
-        num_nodes=ckpt["num_nodes"],
-        in_dim=ckpt["in_dim"],
-        hidden_dim=ckpt["student_hidden_dim"],
-        out_dim=ckpt["seq_length"],
-        dropout=ckpt["dropout"],
-        support_len=len(supports),
-        gcn_order=ckpt["student_order"],
-        graph_layers=ckpt["student_layers"],
-        input_seq_len=ckpt["input_seq_len"],
-    ).to(device)
+    model = build_student_from_checkpoint(ckpt, supports, device)
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
     return model
