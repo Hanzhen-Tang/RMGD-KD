@@ -1,401 +1,251 @@
-# CCKD Paper Project Handover
+# CCKD Paper Handover - Current State
 
-## 1. Project Purpose
+Last updated: 2026-04-28
 
-This project is for a traffic forecasting paper centered on a lightweight knowledge distillation framework named **CCKD**.
+This document is the quick handover file for a future model or a new account with no chat memory. Read this file first. The longer file `docs/project_full_memory.md` contains historical development notes, including abandoned versions, so its older sections must not override this current-state handover.
 
-The paper focus is:
+## 1. Project Goal
 
-- lightweight traffic forecasting
-- teacher-student knowledge distillation
-- confidence-adaptive dual-path distillation
-- soft curriculum over forecasting horizons
-- performance-efficiency trade-off rather than absolute state-of-the-art accuracy
+The project is a Chinese academic paper on lightweight traffic forecasting with knowledge distillation. The current paper-facing method name is `CCKD`.
 
-This handover document is intended to help quickly resume work if the conversation context is lost or the user logs in with a different account.
+Recommended paper title:
 
----
+`CCKD：可信度自适应双路径蒸馏与软课程机制的轻量化交通预测方法`
 
-## 2. Paper Title and Positioning
+Do not use version names such as `v3`, `v4`, or `v5` in the paper.
 
-Current Chinese title:
+Core positioning:
 
-`可信度感知双路径蒸馏与软课程机制的轻量交通预测方法`
+- This is not a new strongest traffic forecasting backbone.
+- The contribution is a better distillation strategy for a lightweight student model.
+- The paper should emphasize the accuracy-efficiency trade-off, not absolute SOTA over all heavy models.
+- The key story is that teacher knowledge reliability and forecasting-horizon difficulty are both heterogeneous in traffic forecasting.
 
-Positioning:
+## 2. Current Model Structure
 
-- This paper is **not** framed as a new strongest forecasting backbone.
-- The contribution is a **better distillation strategy for a lightweight student model**.
-- The core story is that teacher knowledge quality and forecasting difficulty are both heterogeneous in traffic forecasting, so the student should not mimic the teacher uniformly.
+Teacher:
 
----
+- `GWNet Teacher`
+- Provides stronger spatiotemporal forecasting knowledge during training.
 
-## 3. Core Method Definition
+Student:
 
-### 3.1 Teacher and Student
+- `Lightweight GCN Student`
+- Final deployable model.
+- Only the student is used during inference.
 
-- Teacher model: `GWNet`
-- Student model: lightweight `GCN`
+Training framework:
 
-The teacher is used to provide stronger spatiotemporal forecasting knowledge, while the student is the lightweight deployable model.
+- Historical traffic sequence is fed to both teacher and student.
+- Teacher and student forecasts are used by the confidence-adaptive dual-path distillation module.
+- Distillation losses are further adjusted by the soft curriculum weighting module over forecasting horizons.
+- Ground-truth labels provide hard supervision.
+- Total loss trains the student.
 
-### 3.2 Confidence-Adaptive Dual-Path Distillation
+Inference framework:
+
+- Teacher, confidence estimation, dual-path distillation, and curriculum weighting are training-time mechanisms.
+- Inference efficiency should be measured on the final student model only.
+
+## 3. Core Contribution 1: Confidence-Adaptive Dual-Path Distillation
 
 This is the main innovation.
 
-Key logic:
-
-- Estimate teacher knowledge confidence from teacher prediction error against ground-truth labels.
-- Map teacher error into a continuous confidence score `c in [0, 1]`.
-- Use **soft routing**, not a hard threshold.
-- Absolute-value distillation is weighted by `c`.
-- Trend distillation is weighted by `1 - c`.
-- High-confidence regions therefore emphasize absolute-value distillation.
-- Low-confidence regions therefore emphasize trend distillation.
-- Low-confidence regions are **not discarded**; instead, they use a more robust trend-transfer path.
-
 Correct interpretation:
 
-- This is **not** simple filtering.
-- This is **not** a binary rule such as `c > 0.5` for absolute distillation and `c < 0.5` for trend distillation.
-- For each node-horizon position, both paths can contribute; confidence only changes their relative weights.
-- This is **confidence-guided differentiated distillation**.
+- Teacher prediction error against ground-truth labels is converted into a continuous confidence score `c in [0, 1]`.
+- This is soft routing, not hard filtering.
+- Do not write that `c > 0.5` goes to absolute-value distillation and `c < 0.5` goes to trend distillation.
+- For each node-horizon position, both distillation paths can contribute.
+- Absolute-value distillation is weighted by confidence `c`.
+- Trend distillation is weighted by the complementary low-confidence term.
+- High confidence emphasizes direct value matching.
+- Low confidence emphasizes trend consistency.
+- Low-confidence teacher knowledge is not discarded; it is transferred in a more robust trend form.
 
-### 3.3 Soft Curriculum Over Horizons
+Current code behavior:
 
-This is the second main innovation.
+- Implemented in `losses/distillation.py`.
+- Teacher error is computed as `abs(teacher_pred - real_value)` with invalid targets masked.
+- Node-level error and horizon-level error are averaged separately.
+- Each error map is inverse min-max normalized into confidence.
+- Final confidence is `node_confidence * horizon_confidence`, then masked by valid labels.
+- This means the draft formula `c = 1 / (1 + e / tau)` is not faithful to the current code and should not be used unless the code is changed.
 
-Key logic:
+Current loss behavior:
 
-- All forecasting horizons are active from the beginning.
-- Short-term horizons have larger distillation weights in early training.
-- Long-term horizon weights increase gradually as training proceeds.
-- This is a **soft curriculum**, not a hard curriculum.
+- Absolute path uses a mask like `confidence_score * curriculum_map`.
+- Trend path computes differences between adjacent forecast horizons.
+- Trend confidence uses the average confidence of two adjacent horizons.
+- Trend mask uses the complementary term of that averaged confidence.
+- Both absolute and trend losses currently use Smooth L1 on temperature-scaled predictions.
 
-Important clarification:
+Paper wording to preserve:
 
-- `standard / short / wide / soft` are curriculum strategy variants from experimentation and implementation tuning.
-- In the paper, the **main final method should emphasize `soft curriculum`**.
-- Other variants should be discussed in experiments or ablations, not presented as equally central method components.
+`本文并未采用硬阈值将教师知识划分为高可信和低可信两类，而是将教师预测误差映射为连续可信度分数，并以该分数作为软权重调节两类蒸馏损失。其中，绝对值蒸馏由可信度分数加权，趋势蒸馏由其互补项加权，从而实现平滑的双路径知识迁移。`
 
----
+## 4. Core Contribution 2: Soft Curriculum Over Forecasting Horizons
 
-## 4. Main Storyline for the Paper
+Paper-facing idea:
 
-The paper should consistently tell this story:
+- Multi-step traffic forecasting has horizon difficulty heterogeneity.
+- Short-term horizons are generally easier and more stable.
+- Long-term horizons are harder and more uncertain.
+- The student should receive a smooth horizon curriculum rather than uniform distillation pressure.
 
-1. Heavy traffic forecasting models can achieve strong accuracy but are costly to deploy.
-2. Lightweight student models need effective distillation to approach teacher performance.
-3. Vanilla KD assumes that teacher knowledge is equally reliable at all nodes and horizons, which is not true in traffic forecasting.
-4. Teacher knowledge quality is heterogeneous.
-5. Forecasting difficulty across horizons is also heterogeneous.
-6. Therefore, the student should learn **different knowledge types in different regions**, and should absorb teacher knowledge with a **progressive, smooth horizon curriculum**.
+Important distinction:
 
-This is the main narrative thread that should remain stable across abstract, introduction, method, and experiments.
+- The intended paper story is soft curriculum, not hard curriculum.
+- All 12 horizons should remain active if the paper claims soft curriculum.
+- Early training should emphasize short-term horizons.
+- Long-term horizon weights should gradually increase as training progresses.
 
----
+Implementation warning:
 
-## 5. Datasets and Evaluation
+- Current code supports `curriculum_mode` values: `standard`, `short`, `wide`, and `soft`.
+- Current training script default is `standard`.
+- `standard`, `short`, and `wide` contain hard horizon opening behavior.
+- If the final paper claims that all horizons are always active, final experiments should use `--curriculum_mode soft` or the code should be adjusted to match the paper.
+- Also verify the direction of the `soft` weights before final submission; the code should match the figure and text claim that short-term horizons are emphasized early and long-term weights gradually increase.
 
-Main datasets:
+## 5. Formula Notes
 
-- `METR-LA`
-- `PEMS-BAY`
+Target venue constraints mentioned by the user:
 
-Metrics:
+- Final equations should be entered with MathType.
+- Equation numbers should use Chinese style such as `（1）`.
+- Do not use teacher/student superscripts except real powers.
+- Prefer teacher/student explanatory subscripts such as `te` and `st`.
+- Every symbol, including subscripts, must be explained.
+- Variables should be single-letter italic where possible.
+- If `log` appears, specify the base. The current method does not need `log`.
 
-- `MAE`
-- `MAPE`
-- `RMSE`
+Known draft-paper formula issues:
 
-Interpretation note:
+- The current draft used `c = 1 / (1 + e / tau)`, which does not match the code.
+- The current draft used trend weight `1 - c_{i,h}`, but the code uses the complement of adjacent-horizon averaged confidence for trend differences.
+- The current draft soft curriculum formula may not match current code.
+- Before finalizing the paper, align formulas, code, and figures.
 
-- `METR-LA` is treated as the more complex dataset.
-- `PEMS-BAY` is treated as more stable/easier.
-- This difference is one reason curriculum strategy sensitivity became an important design point.
+## 6. Current Figures
 
----
+The user currently has four core paper figures:
 
-## 6. Current Figure Strategy
+1. Overall framework figure.
+2. Teacher-student architecture figure.
+3. Confidence-Adaptive Dual-Path Distillation module figure.
+4. Soft Curriculum Weighting module figure.
 
-### Figures to keep in the paper
+Overall framework figure:
 
-Recommended figure set:
+- It is a training framework figure.
+- `Total Loss` can be the terminal node.
+- A dashed optimization/backpropagation arrow from total loss to the student is acceptable.
+- Stacked visual effects are appropriate for historical input, teacher module, and student module.
+- Stacked effects are not recommended for teacher forecasts, student forecasts, total loss, or ground-truth labels.
 
-1. Overall framework figure
-2. Teacher/student structure figure
-3. Soft curriculum mechanism figure
-4. Teacher-student prediction comparison figure
-5. Performance-efficiency trade-off figure
-6. Optional heatmap figure (`teacher error` or `confidence`)
+Dual-path module figure:
 
-### Important figure decision
+- Avoid drawing hard branch selection.
+- Label the absolute path as `weighted by c`.
+- Label the trend path as `weighted by 1-c` or complementary confidence.
+- Include wording such as `soft routing: both paths are active`.
 
-The dual-path distillation mechanism **does not necessarily need a separate figure** if the overall framework already contains enough detail.
+Soft curriculum figure:
 
-Current consensus:
+- Recommended representative horizons: `H1`, `H3`, `H5`, `H7`, `H10`, `H12`.
+- It should communicate that all horizons are active only if final experiments use true soft curriculum.
 
-- If the overall framework figure includes a relatively detailed dual-path module, a second dual-path figure may feel repetitive.
-- In that case, it is acceptable to **keep only the overall framework figure** and explain the dual-path mechanism in the text.
-- If the dual-path module inside the overall framework becomes too tiny or unreadable, either simplify it or bring back a separate mechanism figure.
+Teacher-student structure figure:
 
-### Overall framework figure guidance
+- Use two subfigures if needed: `(a) GWNet Teacher`, `(b) Lightweight GCN Student`.
+- Teacher can show gated spatiotemporal block, graph convolution, residual/skip connection, BatchNorm, prediction head.
+- Student should look simpler: input projection, temporal conv, lightweight graph block, temporal readout, prediction head.
 
-- It is a **training framework figure**, not only an inference graph.
-- `Total Loss` can be the terminal node; it does not require an additional output box.
-- If desired, a dashed feedback arrow from `Total Loss` back to the student can indicate optimization/backpropagation.
-- Stacked overlap effects are appropriate for:
-  - historical input
-  - teacher module
-  - student module
-- Stacked overlap effects are **not recommended** for:
-  - teacher forecasts
-  - student forecasts
-  - total loss
-  - ground-truth labels
+## 7. Experiment and Table Plan
 
-### Overall framework wording choices
+Use `[待填]` placeholders until real results are available. Do not invent numbers.
 
-Teacher module:
+Recommended tables:
 
-- `GWNet Teacher`
-- `ST Block × 4`
-- `Prediction Head`
+- Table 1: dataset statistics for `METR-LA` and `PEMS-BAY`.
+- Table 2: main results on both datasets, including teacher, student-only, vanilla KD, and CCKD.
+- Table 3: accuracy-efficiency comparison with MAE/MAPE/RMSE, parameters, inference time, and deploy model.
+- Table 4: ablation study with student-only, vanilla KD, w/o confidence-adaptive distillation, w/o soft curriculum, and full CCKD.
+- Optional Table 5: generalization across another lightweight student or teacher-student combination.
+- Optional Table 6: curriculum or hyperparameter sensitivity.
 
-Student module:
+Main comparison interpretation:
 
-- `Lightweight GCN Student`
-- `GCN Block × 3`
-- `Prediction Head`
+- Do not claim CCKD beats every heavy classical model.
+- The main claim is that CCKD improves the lightweight student compared with student-only and vanilla KD.
+- Also show whether CCKD narrows the teacher-student performance gap.
+- Efficiency should be reported for the deployed student.
 
-Forecast outputs:
+Classical model comparison:
 
-- `Teacher Forecasts`
-- `Student Forecasts`
+- Possible baselines: `STGCN`, `DCRNN`, `Graph WaveNet`, `AGCRN`, `GWNet Teacher`, `Student only`, `Vanilla KD`, `CCKD`.
+- If `Graph WaveNet` and `GWNet Teacher` are the same implementation, avoid duplicate rows or explain the distinction clearly.
 
-If formulas are shown in the figure but cannot be rendered in LaTeX, a hand-written style like `Ŷ_te` and `Ŷ_st` is acceptable.
+Generalization experiment suggested by the advisor:
 
-### Soft curriculum figure guidance
+- Purpose: show that CCKD is not only effective for one teacher-student pair.
+- Minimum-cost design: keep `GWNet Teacher`, add one additional lightweight student, and compare `Student only`, `Vanilla KD`, and `CCKD` on at least `METR-LA`.
+- Better design: run the same on both `METR-LA` and `PEMS-BAY`.
+- Do not expand to unrelated domains such as image classification unless the project scope changes.
 
-The final curriculum figure should focus on **soft curriculum only**, not all curriculum strategy variants.
+## 8. Paper Draft Status
 
-Recommended representative horizons:
+The GPT-generated draft `CCKD_中文学术论文初稿_带引用占位符.doc/.docx` was reviewed.
 
-- `H1`
-- `H3`
-- `H5`
-- `H7`
-- `H10`
-- `H12`
+Good aspects:
 
-This figure should communicate:
+- Overall story is correct.
+- It says CCKD is not a new strongest backbone.
+- It says inference keeps only the student.
+- It says confidence is soft routing rather than hard thresholding.
+- It says low-confidence teacher knowledge is not discarded.
+- It includes tables with `[待填]` rather than fabricated results.
 
-- all horizons are active
-- short-term first
-- long-term weights gradually increase
+Required fixes before using the draft as the paper base:
 
----
+- Replace the confidence formula to match code or change code to match the formula.
+- Replace the trend weighting formula to reflect adjacent-horizon averaged confidence.
+- Ensure curriculum formula, figure, and final experiments all match.
+- Convert final equations to MathType.
+- Replace placeholder references with real references.
+- Save the file as real `.docx`; the old file had `.doc` extension but docx-like contents.
 
-## 7. Teacher and Student Structure Figures
+## 9. Key Project Files
 
-These are separate from the overall framework and can contain more internal detail.
+Important files:
 
-### Teacher structure figure
+- `README.md`: project usage overview, but verify it does not still expose paper-facing version names.
+- `losses/distillation.py`: current confidence, dual-path, and curriculum loss implementation.
+- `train_student_kd.py`: student distillation training entry.
+- `engine.py`: training loops and teacher/student prediction handling.
+- `compare_teacher_student.py`: teacher/student prediction visualization.
+- `scripts/generate_distillation_heatmap.py`: teacher error and confidence heatmaps.
+- `scripts/benchmark_model.py`: parameter and inference speed benchmarking.
+- `scripts/plot_efficiency_tradeoff.py`: accuracy-efficiency figure support.
+- `docs/project_full_memory.md`: long historical memory; older sections may be outdated.
+- `docs/project_handover.md`: current quick handover; this file should be trusted first.
 
-May show:
+## 10. Immediate Next Steps
 
-- `1×1 Conv`
-- gated temporal branches
-- `Tanh`
-- `Sigmoid`
-- `Graph Conv`
-- residual connection
-- `BatchNorm`
-- `Prediction Head`
+Recommended next steps:
 
-### Student structure figure
+1. Decide whether final experiments use `curriculum_mode=soft`; if yes, verify or fix the direction of soft curriculum weights.
+2. Align the paper formulas with `losses/distillation.py`.
+3. Update the GPT draft according to formula and curriculum corrections.
+4. Fill real results in the four required tables.
+5. Consider the small generalization experiment suggested by the advisor.
+6. Finalize the four figures.
+7. Convert final equations into MathType.
+8. Replace citation placeholders with real references.
 
-May show:
+## 11. Resume Prompt for a New Model
 
-- `1×1 Conv`
-- temporal conv
-- `ReLU`
-- `Graph Conv`
-- residual add
-- `BatchNorm`
-- `Temporal Readout`
-- `Dropout`
-- `Prediction Head`
+Use this prompt if context is lost:
 
-These figures should be more detailed than the overall framework, but still not overly dense.
-
----
-
-## 8. Formula and Writing Conventions
-
-### Naming conventions
-
-- Paper method name: `CCKD`
-- Avoid version names like `v3`, `v4`, `v5` in the paper body.
-
-### Formula constraints from the target venue
-
-The target venue requires:
-
-- equations entered with **MathType**
-- equation numbering as `（1）`, `（2）`, ...
-- no teacher/student superscripts except real powers
-- single-letter italic variables
-- explanatory subscripts in upright style
-- every symbol explained clearly
-
-Important consequence:
-
-- Avoid `Ŷ^T`, `Ŷ^S`
-- Prefer teacher/student subscripts such as `te`, `st`
-
-### Draft formula status
-
-Multiple draft DOCX files were reviewed.
-
-Key issue:
-
-- The revised formula drafts improved the symbol system, but the equations are still **not actual MathType objects** yet.
-
-Known specific formula issue:
-
-- There was a typo like `au_{c}` that should be corrected to `\tau_{c}` before final formatting.
-
-If formula work resumes, the main remaining tasks are:
-
-1. unify symbols
-2. rewrite formula text cleanly
-3. manually enter all final equations using MathType
-
----
-
-## 9. Experiment and Table Strategy
-
-### Main results table
-
-Should compare:
-
-- `Teacher`
-- `Baseline Student`
-- `Vanilla KD`
-- `CCKD`
-
-On both:
-
-- `METR-LA`
-- `PEMS-BAY`
-
-### Classical model comparison table
-
-Purpose:
-
-- show competitiveness and efficiency
-- not claim superiority over all heavy models
-
-Recommended columns:
-
-- `Model`
-- `Type`
-- `METR-LA MAE / MAPE / RMSE`
-- `PEMS-BAY MAE / MAPE / RMSE`
-- `Params`
-- `Latency`
-
-Recommended models:
-
-- `STGCN`
-- `DCRNN`
-- `Graph WaveNet`
-- `AGCRN`
-- `CCKD`
-
-### Ablation table
-
-Should include at least:
-
-- full `CCKD`
-- `w/o confidence`
-- `w/o curriculum`
-
----
-
-## 10. Heatmap Analysis Support
-
-A heatmap script was added to the project to support paper visualizations.
-
-Script:
-
-- [generate_distillation_heatmap.py](/C:/Users/86151/Documents/New%20project/scripts/generate_distillation_heatmap.py)
-
-Supported outputs:
-
-- `teacher_error` heatmap
-- `confidence` heatmap
-- or both
-
-Outputs go to:
-
-- `outputs/figures/`
-- `outputs/reports/`
-
-Recommended paper use:
-
-- If only one heatmap is used, prefer the **teacher error heatmap**
-- If two are used, show both teacher error and confidence
-
----
-
-## 11. Key Generated / Updated Project Files
-
-Important project files and their purposes:
-
-- [README.md](/C:/Users/86151/Documents/New%20project/README.md)
-  - rewritten around the current CCKD pipeline
-
-- [project_full_memory.md](/C:/Users/86151/Documents/New%20project/docs/project_full_memory.md)
-  - long-form evolving project memory
-
-- [project_handover.md](/C:/Users/86151/Documents/New%20project/docs/project_handover.md)
-  - current-state handover document
-
-- [generate_distillation_heatmap.py](/C:/Users/86151/Documents/New%20project/scripts/generate_distillation_heatmap.py)
-  - teacher error / confidence heatmap generation
-
-- [compare_teacher_student.py](/C:/Users/86151/Documents/New%20project/compare_teacher_student.py)
-  - teacher/student prediction comparison plotting
-
-- [collect_results.py](/C:/Users/86151/Documents/New%20project/scripts/collect_results.py)
-  - summary table generation
-
-- [plot_efficiency_tradeoff.py](/C:/Users/86151/Documents/New%20project/scripts/plot_efficiency_tradeoff.py)
-  - performance-efficiency figure generation
-
-- [benchmark_model.py](/C:/Users/86151/Documents/New%20project/scripts/benchmark_model.py)
-  - parameters / speed benchmarking
-
----
-
-## 12. Immediate Next Steps
-
-Recommended next priorities:
-
-1. Finalize the overall framework figure
-2. Finalize the teacher/student structure figure(s)
-3. Finalize the soft curriculum figure
-4. Decide whether the dual-path module remains detailed in the overall framework or is separated again
-5. Continue rewriting and polishing the paper draft
-6. Convert final equations into MathType
-7. Fill the remaining experimental results and tables
-
----
-
-## 13. Resume Prompt for a Future Session
-
-If context is lost, the following short instruction can be used to resume efficiently:
-
-`This project is a Chinese paper on CCKD for lightweight traffic forecasting. The teacher is GWNet, the student is a lightweight GCN. The core contributions are confidence-adaptive dual-path distillation and soft curriculum over horizons. Please read docs/project_handover.md first and continue from the current paper-writing and figure-refinement stage.`
+`This is a Chinese academic paper project on CCKD for lightweight traffic forecasting. The current method uses a GWNet teacher and a lightweight GCN student. The main contributions are confidence-adaptive dual-path distillation and soft curriculum weighting over forecasting horizons. Confidence is continuous soft routing, not a hard 0.5 threshold: absolute-value distillation is weighted by confidence and trend distillation by complementary low confidence. Low-confidence teacher knowledge is not discarded. The final deployed model is only the lightweight student. Read docs/project_handover.md first; use docs/project_full_memory.md only as historical context because older sections contain abandoned RMGD-KD/v3/v4 notes. Before writing or editing the paper, align formulas with losses/distillation.py, especially confidence calculation, adjacent-horizon trend weighting, and curriculum mode.`

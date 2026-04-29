@@ -1,3 +1,80 @@
+# Current State - Read This First
+
+Last updated: 2026-04-28
+
+This file is the long historical memory of the project. It contains older notes, including abandoned `RMGD-KD`, `v2`, `v3`, `v4`, and version-name discussions. A future model must not treat the early historical sections as the current method definition.
+
+For the current project state, read `docs/project_handover.md` first. The current paper-facing method is `CCKD`, without version names in the paper.
+
+Current paper goal:
+
+- Chinese academic paper on lightweight traffic forecasting with knowledge distillation.
+- Teacher: `GWNet Teacher`.
+- Student: `Lightweight GCN Student`.
+- Final deployed/inference model: student only.
+- Main contribution 1: confidence-adaptive dual-path distillation.
+- Main contribution 2: soft curriculum weighting over forecasting horizons.
+- Main story: teacher knowledge reliability is heterogeneous across nodes/horizons, and forecasting difficulty is heterogeneous across horizons.
+- Do not frame the method as a new strongest traffic forecasting backbone.
+- Do not claim absolute SOTA over all heavy models.
+- Emphasize improved lightweight student performance and accuracy-efficiency trade-off.
+
+Current confidence-adaptive distillation interpretation:
+
+- Confidence is continuous soft routing, not hard threshold filtering.
+- Do not write `c > 0.5` for absolute distillation and `c < 0.5` for trend distillation.
+- Both paths can contribute for each node-horizon position.
+- Absolute-value distillation is weighted by confidence `c`.
+- Trend distillation is weighted by complementary low-confidence information.
+- Low-confidence teacher knowledge is not discarded; it is transferred as trend consistency.
+
+Current implementation details that matter for paper formulas:
+
+- Implemented in `losses/distillation.py`.
+- Teacher error is `abs(teacher_pred - real_value)` with invalid values masked.
+- Node-level and horizon-level errors are separately averaged and inverse min-max normalized.
+- Final confidence is `node_confidence * horizon_confidence`, then masked.
+- The draft formula `c = 1 / (1 + e / tau)` does not match current code.
+- Trend loss uses adjacent forecast differences.
+- Trend confidence uses the average confidence of adjacent horizons before taking the complementary low-confidence weight.
+- The paper formula should reflect adjacent-horizon trend weighting.
+
+Current curriculum warning:
+
+- Paper-facing story is soft curriculum: all 12 horizons active, short-term emphasized early, long-term weights gradually increase.
+- Current code supports `curriculum_mode = standard | short | wide | soft`.
+- Current script default is `standard`, which contains hard horizon opening.
+- If the final paper claims all horizons are always active, final experiments should use `--curriculum_mode soft` or code should be adjusted.
+- Verify that the direction of `soft` weights matches the paper figure and text before final submission.
+
+Current figure set:
+
+- Figure 1: overall framework.
+- Figure 2: teacher-student architecture.
+- Figure 3: Confidence-Adaptive Dual-Path Distillation module.
+- Figure 4: Soft Curriculum Weighting module.
+
+Current experiment/table plan:
+
+- Table 1: dataset statistics.
+- Table 2: main results on `METR-LA` and `PEMS-BAY`.
+- Table 3: accuracy-efficiency comparison, including deploy model, parameters, inference time.
+- Table 4: ablation study.
+- Optional Table 5: advisor-suggested generalization experiment across another lightweight student or teacher-student pair.
+- Optional Table 6: curriculum or hyperparameter sensitivity.
+
+Current paper draft review:
+
+- The GPT-generated Chinese draft has a good overall story.
+- It must be corrected before use because some formulas do not match the code.
+- Fix confidence formula, trend weighting formula, and curriculum formula/mode.
+- Convert final equations to MathType.
+- Replace placeholder references and `[待填]` results.
+
+The content below is historical memory. Use it only to understand how the project evolved, not as the current method specification.
+
+---
+
 # 项目完整说明与记忆文档
 
 这份文档的目的不是给第一次使用的人看，而是给“以后重新接手这个项目的人”看。
