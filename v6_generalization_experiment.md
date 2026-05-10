@@ -181,7 +181,7 @@ python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/se
 ### 6.3 METR-LA：TCN CCKD
 
 ```powershell
-python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 50 --batch_size 64 --student_model tcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name metr_student_tcn_cckd_v6_soft
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 50 --batch_size 64 --student_model tcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode standard --exp_name metr_student_tcn_cckd_v6_standard
 ```
 
 ### 6.4 PEMS-BAY：TCN Student only
@@ -249,7 +249,7 @@ python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/s
 ```powershell
 python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_tcn_baseline_v6_best.pt --model_type student --exp_name metr_student_tcn_baseline_v6_eval
 python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_tcn_vanilla_kd_v6_best.pt --model_type student --exp_name metr_student_tcn_vanilla_kd_v6_eval
-python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_tcn_cckd_v6_soft_best.pt --model_type student --exp_name metr_student_tcn_cckd_v6_soft_eval
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_tcn_cckd_v6_standard_best.pt --model_type student --exp_name metr_student_tcn_cckd_v6_standard_eval
 ```
 
 ### 8.2 测试 PEMS-BAY 上的 TCN

@@ -256,7 +256,47 @@ Recommended next steps:
 7. Convert final equations into MathType.
 8. Replace citation placeholders with real references.
 
-## 11. Resume Prompt for a New Model
+## 11. v6 Latest Experiment Status
+
+This section records the latest state after the advisor suggested testing whether the proposed distillation strategy can transfer to other lightweight students.
+
+Purpose:
+
+- Show that CCKD is not only effective for the original `Lightweight GCN Student`.
+- Keep the same `GWNet Teacher`.
+- Add alternative lightweight students and compare `Student only`, `Vanilla KD`, and `CCKD`.
+- Use this as a generalization experiment, not as a replacement of the main GCN-based paper story.
+
+Implemented code support:
+
+- `models/student_tcn.py` adds `Lightweight TCN Student`.
+- `models/student_gru.py` adds `Lightweight GRU Student`.
+- `train_student_kd.py` supports `--student_model gcn|tcn|gru`.
+- `test.py`, `scripts/benchmark_model.py`, `scripts/collect_results.py`, and related utilities can rebuild the correct student architecture from checkpoint metadata.
+- Root document `v6_generalization_experiment.md` records the runnable training and testing commands.
+
+Current partial results recorded in `docs/结果.md`:
+
+- `METR-LA` / `Lightweight TCN Student only`: `MAE=3.6748`, `MAPE=0.1044`, `RMSE=7.2083`, `params=27,468`, `latency=13.35ms/batch`.
+- `METR-LA` / `TCN Vanilla KD`: `MAE=3.6682`, `MAPE=0.1056`, `RMSE=7.1411`, `params=27,468`, `latency=20.32ms/batch`.
+- `METR-LA` / `TCN CCKD soft`: `MAE=3.6839`, `MAPE=0.1051`, `RMSE=7.2074`, `params=27,468`, `latency=21.08ms/batch`.
+- `METR-LA` / `TCN CCKD standard`: `MAE=3.7008`, `MAPE=0.1068`, `RMSE=7.2146`, `params=27,468`, `latency=14.79ms/batch`.
+- For comparison, `METR-LA` / `GCN CCKD soft`: `MAE=3.4699`, `MAPE=0.0981`, `RMSE=6.5075`, `params=27,404`, `latency=12.84ms/batch`.
+
+Current interpretation:
+
+- The v6 TCN results do not yet support a strong claim that CCKD improves every lightweight student.
+- `TCN Vanilla KD` is currently better than TCN CCKD by MAE/RMSE on the recorded METR-LA runs.
+- The result is still useful diagnostically, but should not be written as a positive generalization conclusion unless later GRU/PEMS-BAY results support it.
+- If the paper includes a v6 generalization table, be honest and phrase it as an analysis of transferability across lightweight students, not as universal improvement.
+
+Still pending:
+
+- Complete the GRU runs on `METR-LA`.
+- Complete TCN/GRU runs on `PEMS-BAY`.
+- Decide whether the generalization table should enter the main paper, appendix, or be omitted depending on results.
+
+## 12. Resume Prompt for a New Model
 
 Use this prompt if context is lost:
 
