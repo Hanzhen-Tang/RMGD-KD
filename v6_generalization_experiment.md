@@ -135,8 +135,8 @@ checkpoints/teacher/bay_teacher_best.pt
 ```
 
 如果没有，需要先训练教师模型。
-
-## 5. 第 1 步：可选但建议，补跑 GCN CCKD soft 主实验
+---------------------------------------------------训练-----------------------------------------------------------------
+## 5. 第 1 步： GCN CCKD soft 主实验
 
 这两组不是泛化实验，而是“最终主实验候选”。如果论文保留 soft curriculum 图和叙述，建议跑。
 
@@ -144,24 +144,32 @@ checkpoints/teacher/bay_teacher_best.pt
 
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 50 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name metr_student_gcn_cckd_v6_soft
+100轮：
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 100 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name metr_student_gcn_cckd_v6_soft_e100
 ```
 
 ### 5.2 PEMS-BAY：GCN CCKD soft
 
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name bay_student_gcn_cckd_v6_soft
+e100:
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 100 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name bay_student_gcn_cckd_v6_soft_e100
+
 ```
 
 ### 5.3 测试 GCN CCKD soft
 
 ```powershell
 python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_gcn_cckd_v6_soft_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name metr_student_gcn_cckd_v6_soft_eval
+e100
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_gcn_cckd_v6_soft_e100_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name metr_student_gcn_cckd_v6_soft_eval_e100
 ```
 
 ```powershell
 python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_gcn_cckd_v6_soft_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_gcn_cckd_v6_soft_eval
+e100:
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_gcn_cckd_v6_soft_e100_best.pt --model_type student --plot_sensor 10 --plot_horizon 11 --plot_relation --exp_name bay_student_gcn_cckd_v6_soft_eval_e100
 ```
-
 ## 6. 第 2 步：TCN 泛化实验
 
 TCN 泛化实验用于验证：当学生模型换成时间卷积型轻量结构时，CCKD 是否仍然优于未蒸馏学生和普通 KD。
@@ -201,7 +209,6 @@ python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/s
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_model tcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name bay_student_tcn_cckd_v6_soft
 ```
-
 ## 7. 第 3 步：GRU 泛化实验
 
 GRU 泛化实验用于验证：当学生模型换成循环序列型轻量结构时，CCKD 是否仍然有效。它和 TCN 互补，一个代表时间卷积，一个代表循环序列建模。
@@ -241,9 +248,9 @@ python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/s
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_best.pt --epochs 50 --batch_size 64 --student_model gru --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name bay_student_gru_cckd_v6_soft
 ```
-
+---------------------------------------------------测试-----------------------------------------------------------------
 ## 8. 第 4 步：测试 TCN 和 GRU 新 checkpoint
-
+---------TCN----------
 ### 8.1 测试 METR-LA 上的 TCN
 
 ```powershell
@@ -251,7 +258,6 @@ python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/a
 python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_tcn_vanilla_kd_v6_best.pt --model_type student --exp_name metr_student_tcn_vanilla_kd_v6_eval
 python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_tcn_cckd_v6_standard_best.pt --model_type student --exp_name metr_student_tcn_cckd_v6_standard_eval
 ```
-
 ### 8.2 测试 PEMS-BAY 上的 TCN
 
 ```powershell
@@ -259,9 +265,8 @@ python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/
 python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_tcn_vanilla_kd_v6_best.pt --model_type student --exp_name bay_student_tcn_vanilla_kd_v6_eval
 python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_tcn_cckd_v6_soft_best.pt --model_type student --exp_name bay_student_tcn_cckd_v6_soft_eval
 ```
-
+---------GRU----------
 ### 8.3 测试 METR-LA 上的 GRU
-
 ```powershell
 python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_gru_baseline_v6_best.pt --model_type student --exp_name metr_student_gru_baseline_v6_eval
 python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/metr_student_gru_vanilla_kd_v6_best.pt --model_type student --exp_name metr_student_gru_vanilla_kd_v6_eval
@@ -300,6 +305,21 @@ python scripts/collect_results.py --device cuda:0 --data data/METR-LA --adjdata 
 python scripts/collect_results.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --output_csv outputs/reports/bay_v6_gcn_soft_summary.csv --output_md outputs/reports/bay_v6_gcn_soft_summary.md --run "Teacher,teacher,checkpoints/teacher/bay_teacher_best.pt" --run "GCN Student only,student,checkpoints/student/bay_student_baseline_v4_best.pt" --run "GCN Vanilla KD,student,checkpoints/student/bay_student_vanilla_kd_v4_best.pt" --run "GCN CCKD standard,student,checkpoints/student/bay_student_cckd_v4_best.pt" --run "GCN CCKD soft,student,checkpoints/student/bay_student_gcn_cckd_v6_soft_best.pt"
 ```
 
+### 统计推理时间 METR-LA
+```powershell
+教师：
+python scripts\benchmark_model.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --checkpoint checkpoints\teacher\metr_teacher_best.pt --model_type teacher --batch_size 64 --warmup 10 --runs 100
+学生：
+python scripts\benchmark_model.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --checkpoint checkpoints\student\metr_student_gcn_cckd_v6_soft_best.pt --model_type student --batch_size 64 --warmup 10 --runs 100
+```
+### 统计推理时间 PEMS-BAY
+```powershell
+教师：
+python scripts\benchmark_model.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --checkpoint checkpoints\teacher\bay_teacher_best.pt --model_type teacher --batch_size 64 --warmup 10 --runs 100
+学生：
+python scripts\benchmark_model.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --checkpoint checkpoints\student\bay_student_cckd_v4_e60_soft_best.pt --model_type student --batch_size 64 --warmup 10 --runs 100
+```
+
 ## 10. 论文中建议怎么放这组结果
 
 建议把这组实验放在主结果和消融实验之后，作为“泛化性分析”或“不同学生结构适配性分析”。
@@ -333,4 +353,10 @@ PEMS-BAY | LightGRU | CCKD | 待填 | 待填 | 待填 | 待填 | 待填
 ```text
 整体上，CCKD 在多数设置下优于对应的 Student only 与 Vanilla KD，表明该方法具有一定的跨学生结构适配潜力。
 ```
+```powershell
+METR-LA 教师误差热力图 可信度热力图
+python scripts/generate_distillation_heatmap.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --mode both --node_limit 48 --node_select top_error --orientation transpose --exp_name metr_distill_cn_horizontal
 
+soft ：
+python scripts/generate_distillation_heatmap.py --mode none --plot_curriculum --curriculum_mode soft --total_epochs 50 --exp_name metr_soft_curriculum_cn
+```

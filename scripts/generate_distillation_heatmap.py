@@ -13,8 +13,18 @@ import matplotlib.pyplot as plt
 
 import util
 from engine import prepare_batch
-from losses.distillation import compute_confidence_score
+from losses.distillation import compute_confidence_score, compute_curriculum_map
 from model import GWNetTeacher
+
+plt.rcParams["font.sans-serif"] = [
+    "Microsoft YaHei",
+    "SimHei",
+    "FangSong",
+    "STSong",
+    "Noto Sans CJK SC",
+    "Arial Unicode MS",
+]
+plt.rcParams["axes.unicode_minus"] = False
 
 
 def parse_args():
@@ -25,13 +35,13 @@ def parse_args():
     parser.add_argument("--data", type=str, default="data/METR-LA")
     parser.add_argument("--adjdata", type=str, default="data/sensor_graph/adj_mx.pkl")
     parser.add_argument("--adjtype", type=str, default="doubletransition")
-    parser.add_argument("--teacher_checkpoint", type=str, required=True)
+    parser.add_argument("--teacher_checkpoint", type=str)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument(
         "--mode",
         type=str,
         default="both",
-        choices=["teacher_error", "confidence", "both"],
+        choices=["none", "teacher_error", "confidence", "both"],
         help="Which heatmap to generate.",
     )
     parser.add_argument(
@@ -52,6 +62,43 @@ def parse_args():
         type=float,
         default=1.0,
         help="Confidence power used in compute_confidence_score.",
+    )
+    parser.add_argument(
+        "--orientation",
+        type=str,
+        default="normal",
+        choices=["normal", "transpose"],
+        help=(
+            "Figure layout. normal shows nodes on the y-axis and horizons on the x-axis; "
+            "transpose shows horizons on the y-axis and nodes on the x-axis."
+        ),
+    )
+    parser.add_argument(
+        "--plot_curriculum",
+        action="store_true",
+        help="Also plot the curriculum weights across training epochs and horizons.",
+    )
+    parser.add_argument(
+        "--curriculum_mode",
+        type=str,
+        default="soft",
+        choices=["standard", "short", "wide", "soft"],
+        help="Curriculum mode to visualize when --plot_curriculum is used.",
+    )
+    parser.add_argument(
+        "--total_epochs",
+        type=int,
+        default=50,
+        help="Total epoch count used for curriculum visualization.",
+    )
+    parser.add_argument(
+        "--curriculum_display_epochs",
+        type=int,
+        default=0,
+        help=(
+            "Number of leading epochs to display in the curriculum figure. "
+            "Use 0 to auto-trim the unchanged plateau."
+        ),
     )
     parser.add_argument(
         "--exp_name",
@@ -178,7 +225,7 @@ def save_matrix_csv(matrix: np.ndarray, node_indices: np.ndarray, save_path: str
     horizon_labels = [f"H{i}" for i in range(1, matrix.shape[1] + 1)]
     with open(save_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow(["Node"] + horizon_labels)
+        writer.writerow(["节点编号"] + horizon_labels)
         for node_idx, row in zip(node_indices, matrix):
             writer.writerow([int(node_idx)] + [float(value) for value in row])
 
@@ -189,14 +236,22 @@ def plot_node_horizon_heatmap(
     save_path: str,
     title: str,
     cmap: str,
+    orientation: str,
+    colorbar_label: str,
 ):
     ensure_dir(os.path.dirname(save_path))
 
-    fig_width = max(7.5, 0.52 * matrix.shape[1] + 4.0)
-    fig_height = max(6.0, 0.18 * matrix.shape[0] + 2.8)
+    plot_matrix = matrix
+    if orientation == "transpose":
+        plot_matrix = matrix.T
+        fig_width = max(10.5, 0.22 * matrix.shape[0] + 4.2)
+        fig_height = max(4.8, 0.35 * matrix.shape[1] + 2.5)
+    else:
+        fig_width = max(7.5, 0.52 * matrix.shape[1] + 4.0)
+        fig_height = max(6.0, 0.18 * matrix.shape[0] + 2.8)
     plt.figure(figsize=(fig_width, fig_height))
 
-    finite_values = matrix[np.isfinite(matrix)]
+    finite_values = plot_matrix[np.isfinite(plot_matrix)]
     if finite_values.size > 0:
         vmin = np.percentile(finite_values, 5)
         vmax = np.percentile(finite_values, 95)
@@ -206,18 +261,36 @@ def plot_node_horizon_heatmap(
     else:
         vmin, vmax = None, None
 
-    im = plt.imshow(matrix, cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax)
-    plt.colorbar(im, fraction=0.046, pad=0.04)
-    plt.title(title)
-    plt.xlabel("Forecast Horizon")
-    plt.ylabel("Node Index")
-    plt.xticks(
-        ticks=np.arange(matrix.shape[1]),
-        labels=[f"H{i}" for i in range(1, matrix.shape[1] + 1)],
+    im = plt.imshow(
+        plot_matrix,
+        cmap=cmap,
+        aspect="auto",
+        vmin=vmin,
+        vmax=vmax,
+        origin="lower" if orientation == "transpose" else "upper",
     )
-    y_tick_step = max(1, len(node_indices) // 12)
-    y_positions = np.arange(0, len(node_indices), y_tick_step)
-    plt.yticks(y_positions, labels=[str(int(node_indices[pos])) for pos in y_positions])
+    plt.colorbar(im, fraction=0.046, pad=0.04, label=colorbar_label)
+    plt.title(title)
+    if orientation == "transpose":
+        plt.xlabel("节点编号")
+        plt.ylabel("预测步长")
+        x_tick_step = max(1, len(node_indices) // 12)
+        x_positions = np.arange(0, len(node_indices), x_tick_step)
+        plt.xticks(x_positions, labels=[str(int(node_indices[pos])) for pos in x_positions])
+        plt.yticks(
+            ticks=np.arange(matrix.shape[1]),
+            labels=[f"H{i}" for i in range(1, matrix.shape[1] + 1)],
+        )
+    else:
+        plt.xlabel("预测步长")
+        plt.ylabel("节点编号")
+        plt.xticks(
+            ticks=np.arange(matrix.shape[1]),
+            labels=[f"H{i}" for i in range(1, matrix.shape[1] + 1)],
+        )
+        y_tick_step = max(1, len(node_indices) // 12)
+        y_positions = np.arange(0, len(node_indices), y_tick_step)
+        plt.yticks(y_positions, labels=[str(int(node_indices[pos])) for pos in y_positions])
     plt.tight_layout()
     plt.savefig(save_path, dpi=260)
     plt.close()
@@ -231,67 +304,186 @@ def export_heatmap(
     cmap: str,
     fig_path: str,
     csv_path: str,
+    orientation: str,
+    colorbar_label: str,
 ):
     matrix_view, node_indices = select_nodes(matrix, node_limit=node_limit, strategy=node_select)
     save_matrix_csv(matrix_view, node_indices, csv_path)
-    plot_node_horizon_heatmap(matrix_view, node_indices, fig_path, title=title, cmap=cmap)
+    plot_node_horizon_heatmap(
+        matrix_view,
+        node_indices,
+        fig_path,
+        title=title,
+        cmap=cmap,
+        orientation=orientation,
+        colorbar_label=colorbar_label,
+    )
     return matrix_view.shape[0]
+
+
+def save_curriculum_csv(matrix: np.ndarray, save_path: str):
+    ensure_dir(os.path.dirname(save_path))
+    horizon_labels = [f"H{i}" for i in range(1, matrix.shape[1] + 1)]
+    with open(save_path, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f)
+        writer.writerow(["训练轮次"] + horizon_labels)
+        for epoch_idx, row in enumerate(matrix, start=1):
+            writer.writerow([epoch_idx] + [float(value) for value in row])
+
+
+def plot_curriculum_heatmap(
+    mode: str,
+    total_epochs: int,
+    fig_path: str,
+    csv_path: str,
+    display_epochs: int,
+):
+    ensure_dir(os.path.dirname(fig_path))
+    device = torch.device("cpu")
+    horizon_count = 12
+    total_epochs = max(1, total_epochs)
+    rows = []
+    for epoch_idx in range(total_epochs):
+        weights, _ = compute_curriculum_map(
+            horizon_count=horizon_count,
+            current_epoch=epoch_idx,
+            total_epochs=total_epochs,
+            device=device,
+            mode=mode,
+        )
+        rows.append(weights.view(-1).cpu().numpy())
+    matrix = np.stack(rows, axis=0)
+    save_curriculum_csv(matrix, csv_path)
+
+    if display_epochs > 0:
+        display_count = min(display_epochs, total_epochs)
+    else:
+        changing = np.where(np.any(np.abs(matrix - 1.0) > 1e-6, axis=1))[0]
+        display_count = int(changing[-1] + 2) if changing.size else total_epochs
+        display_count = min(max(display_count, 6), total_epochs)
+
+    display_matrix = matrix[:display_count, :]
+
+    fig_width = max(7.5, min(10.5, 0.32 * display_count + 3.5))
+    finite_values = display_matrix[np.isfinite(display_matrix)]
+    if finite_values.size:
+        color_vmin = float(finite_values.min())
+        color_vmax = float(finite_values.max())
+        if np.isclose(color_vmin, color_vmax):
+            color_vmin, color_vmax = 0.0, 1.0
+    else:
+        color_vmin, color_vmax = 0.0, 1.0
+
+    plt.figure(figsize=(fig_width, 4.8))
+    im = plt.imshow(
+        display_matrix.T,
+        cmap="YlGnBu",
+        aspect="auto",
+        vmin=color_vmin,
+        vmax=color_vmax,
+        origin="lower",
+    )
+    plt.colorbar(im, fraction=0.046, pad=0.04, label="课程权重")
+    plt.title(f"{mode} 模式下的课程权重随训练轮次变化")
+    plt.xlabel("训练轮次")
+    plt.ylabel("预测步长")
+    x_step = max(1, display_count // 8)
+    x_positions = np.arange(0, display_count, x_step)
+    plt.xticks(x_positions, labels=[str(int(pos + 1)) for pos in x_positions])
+    plt.yticks(
+        ticks=np.arange(horizon_count),
+        labels=[f"H{i}" for i in range(1, horizon_count + 1)],
+    )
+    if display_count < total_epochs:
+        plt.axvline(display_count - 1.5, color="#4A5568", linestyle="--", linewidth=1.0)
+    plt.tight_layout()
+    plt.savefig(fig_path, dpi=260)
+    plt.close()
 
 
 def main():
     args = parse_args()
+    if args.mode == "none" and not args.plot_curriculum:
+        raise ValueError("Nothing to plot. Use --mode teacher_error/confidence/both or add --plot_curriculum.")
+    if args.mode != "none" and not args.teacher_checkpoint:
+        raise ValueError("--teacher_checkpoint is required unless --mode none is used.")
+
     ensure_dir(args.fig_dir)
     ensure_dir(args.csv_dir)
 
-    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-    dataloader = util.load_dataset(args.data, args.batch_size, args.batch_size, args.batch_size)
-    scaler = dataloader["scaler"]
-    _, _, adj_mx = util.load_adj(args.adjdata, args.adjtype)
-    supports = [torch.tensor(adj, dtype=torch.float32, device=device) for adj in adj_mx]
-
-    ckpt = util.load_checkpoint(args.teacher_checkpoint, map_location=device)
-    model = build_teacher_model(args, ckpt, device, supports)
-
-    aggregated = aggregate_maps(
-        model=model,
-        dataloader=dataloader,
-        scaler=scaler,
-        device=device,
-        confidence_power=args.confidence_power,
-    )
-
     outputs = []
-    if args.mode in ("teacher_error", "both"):
-        fig_path = os.path.join(args.fig_dir, f"{args.exp_name}_teacher_error_heatmap.png")
-        csv_path = os.path.join(args.csv_dir, f"{args.exp_name}_teacher_error_heatmap.csv")
-        shown_nodes = export_heatmap(
-            matrix=aggregated["teacher_error"],
-            node_limit=args.node_limit,
-            node_select=args.node_select,
-            title="Teacher Prediction Error Across Nodes and Horizons",
-            cmap="YlOrRd",
-            fig_path=fig_path,
-            csv_path=csv_path,
-        )
-        outputs.append(f"teacher_error_figure={fig_path}")
-        outputs.append(f"teacher_error_csv={csv_path}")
-        outputs.append(f"teacher_error_nodes={shown_nodes}")
+    if args.mode != "none":
+        device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+        dataloader = util.load_dataset(args.data, args.batch_size, args.batch_size, args.batch_size)
+        scaler = dataloader["scaler"]
+        _, _, adj_mx = util.load_adj(args.adjdata, args.adjtype)
+        supports = [torch.tensor(adj, dtype=torch.float32, device=device) for adj in adj_mx]
 
-    if args.mode in ("confidence", "both"):
-        fig_path = os.path.join(args.fig_dir, f"{args.exp_name}_confidence_heatmap.png")
-        csv_path = os.path.join(args.csv_dir, f"{args.exp_name}_confidence_heatmap.csv")
-        shown_nodes = export_heatmap(
-            matrix=aggregated["confidence"],
-            node_limit=args.node_limit,
-            node_select=args.node_select,
-            title="Confidence Scores Across Nodes and Horizons",
-            cmap="Blues",
+        ckpt = util.load_checkpoint(args.teacher_checkpoint, map_location=device)
+        model = build_teacher_model(args, ckpt, device, supports)
+
+        aggregated = aggregate_maps(
+            model=model,
+            dataloader=dataloader,
+            scaler=scaler,
+            device=device,
+            confidence_power=args.confidence_power,
+        )
+
+        if args.mode in ("teacher_error", "both"):
+            fig_path = os.path.join(args.fig_dir, f"{args.exp_name}_teacher_error_heatmap.png")
+            csv_path = os.path.join(args.csv_dir, f"{args.exp_name}_teacher_error_heatmap.csv")
+            shown_nodes = export_heatmap(
+                matrix=aggregated["teacher_error"],
+                node_limit=args.node_limit,
+                node_select=args.node_select,
+                title="教师预测误差热力图（节点-预测步长）",
+                cmap="YlOrRd",
+                fig_path=fig_path,
+                csv_path=csv_path,
+                orientation=args.orientation,
+                colorbar_label="教师预测误差",
+            )
+            outputs.append(f"teacher_error_figure={fig_path}")
+            outputs.append(f"teacher_error_csv={csv_path}")
+            outputs.append(f"teacher_error_nodes={shown_nodes}")
+
+        if args.mode in ("confidence", "both"):
+            fig_path = os.path.join(args.fig_dir, f"{args.exp_name}_confidence_heatmap.png")
+            csv_path = os.path.join(args.csv_dir, f"{args.exp_name}_confidence_heatmap.csv")
+            shown_nodes = export_heatmap(
+                matrix=aggregated["confidence"],
+                node_limit=args.node_limit,
+                node_select=args.node_select,
+                title="可信度评分热力图（节点-预测步长）",
+                cmap="Blues",
+                fig_path=fig_path,
+                csv_path=csv_path,
+                orientation=args.orientation,
+                colorbar_label="可信度得分",
+            )
+            outputs.append(f"confidence_figure={fig_path}")
+            outputs.append(f"confidence_csv={csv_path}")
+            outputs.append(f"confidence_nodes={shown_nodes}")
+
+    if args.plot_curriculum:
+        fig_path = os.path.join(
+            args.fig_dir,
+            f"{args.exp_name}_{args.curriculum_mode}_curriculum_heatmap.png",
+        )
+        csv_path = os.path.join(
+            args.csv_dir,
+            f"{args.exp_name}_{args.curriculum_mode}_curriculum_heatmap.csv",
+        )
+        plot_curriculum_heatmap(
+            mode=args.curriculum_mode,
+            total_epochs=args.total_epochs,
             fig_path=fig_path,
             csv_path=csv_path,
+            display_epochs=args.curriculum_display_epochs,
         )
-        outputs.append(f"confidence_figure={fig_path}")
-        outputs.append(f"confidence_csv={csv_path}")
-        outputs.append(f"confidence_nodes={shown_nodes}")
+        outputs.append(f"curriculum_figure={fig_path}")
+        outputs.append(f"curriculum_csv={csv_path}")
 
     for line in outputs:
         print(line)

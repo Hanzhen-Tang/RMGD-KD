@@ -445,5 +445,8 @@ python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/
 
 ```powershell
 METR-LA 教师误差热力图 可信度热力图
-python scripts/generate_distillation_heatmap.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --mode both --node_limit 48 --node_select top_error --exp_name metr_distill
+python scripts/generate_distillation_heatmap.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --mode both --node_limit 48 --node_select top_error --orientation transpose --exp_name metr_distill_cn_horizontal
+
+soft ：
+python scripts/generate_distillation_heatmap.py --mode none --plot_curriculum --curriculum_mode soft --total_epochs 50 --exp_name metr_soft_curriculum_cn
 ```
