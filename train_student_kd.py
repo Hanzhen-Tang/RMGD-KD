@@ -9,6 +9,12 @@ import torch
 import util
 from engine import DistillationTrainer, count_parameters, prepare_batch
 from model import GWNetTeacher, STUDENT_MODEL_CHOICES, build_student_model
+from utils.curriculum import (
+    DynamicCurriculumConfig,
+    DynamicCurriculumScheduler,
+    compute_horizon_signal_sums,
+    reduce_horizon_signal_sums,
+)
 from utils.plotting import plot_training_curves, save_history
 
 
@@ -43,8 +49,14 @@ def parse_args():
         "--curriculum_mode",
         type=str,
         default="standard",
-        choices=["standard", "short", "wide", "soft"],
+        choices=["standard", "short", "wide", "soft", "dynamic_soft"],
     )
+    parser.add_argument("--dynamic_curriculum_alpha", type=float, default=0.45)
+    parser.add_argument("--dynamic_curriculum_beta", type=float, default=0.35)
+    parser.add_argument("--dynamic_curriculum_gamma", type=float, default=0.20)
+    parser.add_argument("--dynamic_curriculum_eta", type=float, default=0.70)
+    parser.add_argument("--dynamic_curriculum_ema", type=float, default=0.90)
+    parser.add_argument("--dynamic_curriculum_warmup", type=int, default=5)
     parser.add_argument("--disable_confidence_filter", action="store_true")
     parser.add_argument(
         "--disable_reliability",
@@ -68,6 +80,12 @@ def set_seed(seed: int):
 
 def ensure_dir(path: str):
     os.makedirs(path, exist_ok=True)
+
+
+def to_float_list(values):
+    if values is None:
+        return None
+    return np.asarray(values, dtype=float).tolist()
 
 
 def build_teacher_from_checkpoint(ckpt, device, supports):
@@ -108,6 +126,25 @@ def main():
     in_dim = dataloader["x_train"].shape[3]
     seq_length = dataloader["y_train"].shape[1]
     input_seq_len = dataloader["x_train"].shape[1]
+
+    use_dynamic_curriculum = args.curriculum_mode == "dynamic_soft" and not args.disable_curriculum
+    dynamic_config = DynamicCurriculumConfig(
+        alpha=args.dynamic_curriculum_alpha,
+        beta=args.dynamic_curriculum_beta,
+        gamma=args.dynamic_curriculum_gamma,
+        eta=args.dynamic_curriculum_eta,
+        ema=args.dynamic_curriculum_ema,
+        warmup=args.dynamic_curriculum_warmup,
+    )
+    dynamic_scheduler = (
+        DynamicCurriculumScheduler(
+            horizon_count=seq_length,
+            total_epochs=args.epochs,
+            config=dynamic_config,
+        )
+        if use_dynamic_curriculum
+        else None
+    )
 
     student = build_student_model(
         student_model=args.student_model,
@@ -167,6 +204,15 @@ def main():
         "mean_horizon_confidence": [],
         "trend_ratio": [],
         "val_latency_ms": [],
+        "dynamic_curriculum_weight": [],
+        "dynamic_curriculum_base_weight": [],
+        "dynamic_curriculum_next_weight": [],
+        "dynamic_curriculum_difficulty": [],
+        "dynamic_curriculum_readiness": [],
+        "dynamic_horizon_mae": [],
+        "dynamic_teacher_student_gap": [],
+        "dynamic_teacher_confidence": [],
+        "dynamic_valid_count": [],
     }
     best_val_mae = float("inf")
     best_val_loss_at_best_mae = float("inf")
@@ -182,10 +228,18 @@ def main():
         f"[{METHOD_NAME}] teacher_params={teacher_params:,}, student_params={student_params:,}, "
         f"compression_ratio={compression_ratio:.2f}x, curriculum_mode={args.curriculum_mode}"
     )
+    if dynamic_scheduler is not None:
+        print(f"[{METHOD_NAME}] dynamic curriculum config={dynamic_config.to_dict()}")
 
     for epoch in range(1, args.epochs + 1):
         epoch_start = time.time()
         trainer.set_epoch(epoch, args.epochs)
+        current_curriculum_state = None
+        if dynamic_scheduler is not None:
+            current_curriculum_state = dynamic_scheduler.state_for_epoch(epoch)
+            trainer.set_curriculum_override(current_curriculum_state["weights"])
+        else:
+            trainer.set_curriculum_override(None)
         dataloader["train_loader"].shuffle()
 
         train_losses, train_maes, train_mapes, train_rmses = [], [], [], []
@@ -218,6 +272,7 @@ def main():
         val_losses, val_maes, val_mapes, val_rmses, val_latencies = [], [], [], [], []
         mean_confidences, mean_node_confidences, mean_horizon_confidences = [], [], []
         trend_ratios = []
+        horizon_signal_sums = None
         last_visible_horizon = seq_length
         for x, y in dataloader["val_loader"].get_iterator():
             inputs, targets = prepare_batch(x, y, device)
@@ -232,6 +287,18 @@ def main():
             mean_horizon_confidences.append(metrics["mean_horizon_weight"])
             trend_ratios.append(metrics["trend_ratio"])
             last_visible_horizon = metrics["visible_horizon"]
+            if dynamic_scheduler is not None:
+                batch_sums = compute_horizon_signal_sums(
+                    student_pred=metrics["pred"],
+                    teacher_pred=metrics["teacher_pred"],
+                    real_value=metrics["real"],
+                    null_val=0.0,
+                )
+                if horizon_signal_sums is None:
+                    horizon_signal_sums = {key: value.copy() for key, value in batch_sums.items()}
+                else:
+                    for key, value in batch_sums.items():
+                        horizon_signal_sums[key] += value
 
         mean_train_loss = float(np.mean(train_losses))
         mean_train_mae = float(np.mean(train_maes))
@@ -264,6 +331,30 @@ def main():
         history["trend_ratio"].append(float(np.mean(trend_ratios)))
         history["val_latency_ms"].append(mean_val_latency)
 
+        dynamic_log = ""
+        if dynamic_scheduler is not None and horizon_signal_sums is not None:
+            horizon_signals = reduce_horizon_signal_sums(horizon_signal_sums)
+            update_state = dynamic_scheduler.update(
+                student_error=horizon_signals["student_error"],
+                teacher_student_gap=horizon_signals["teacher_student_gap"],
+                teacher_confidence=horizon_signals["teacher_confidence"],
+            )
+            next_epoch = min(epoch + 1, args.epochs)
+            next_curriculum_state = dynamic_scheduler.state_for_epoch(next_epoch)
+            history["dynamic_curriculum_weight"].append(to_float_list(current_curriculum_state["weights"]))
+            history["dynamic_curriculum_base_weight"].append(to_float_list(current_curriculum_state["base_weights"]))
+            history["dynamic_curriculum_next_weight"].append(to_float_list(next_curriculum_state["weights"]))
+            history["dynamic_curriculum_difficulty"].append(to_float_list(update_state["difficulty"]))
+            history["dynamic_curriculum_readiness"].append(to_float_list(update_state["readiness"]))
+            history["dynamic_horizon_mae"].append(to_float_list(horizon_signals["student_error"]))
+            history["dynamic_teacher_student_gap"].append(to_float_list(horizon_signals["teacher_student_gap"]))
+            history["dynamic_teacher_confidence"].append(to_float_list(horizon_signals["teacher_confidence"]))
+            history["dynamic_valid_count"].append(to_float_list(horizon_signals["valid_count"]))
+            dynamic_log = (
+                f", curr_w_mean={float(np.mean(current_curriculum_state['weights'])):.4f}, "
+                f"next_w_min={float(np.min(next_curriculum_state['weights'])):.4f}"
+            )
+
         print(
             f"[{METHOD_NAME}][Epoch {epoch:03d}] "
             f"train_total={mean_train_loss:.4f}, train_mae={mean_train_mae:.4f}, "
@@ -271,7 +362,7 @@ def main():
             f"abs={history['absolute_loss'][-1]:.4f}, trend={history['trend_loss'][-1]:.4f}, "
             f"mean_conf={history['mean_confidence'][-1]:.4f}, trend_ratio={history['trend_ratio'][-1]:.4f}, "
             f"visible_h={last_visible_horizon}, curriculum={args.curriculum_mode}, val_latency={mean_val_latency:.2f}ms, "
-            f"time={time.time() - epoch_start:.2f}s"
+            f"time={time.time() - epoch_start:.2f}s{dynamic_log}"
         )
 
         if mean_val_mae < best_val_mae:
@@ -309,6 +400,8 @@ def main():
             "temperature": args.temperature,
             "confidence_power": args.confidence_power,
             "curriculum_mode": args.curriculum_mode,
+            "dynamic_curriculum_config": dynamic_config.to_dict() if dynamic_scheduler is not None else None,
+            "dynamic_curriculum_final_state": dynamic_scheduler.final_state() if dynamic_scheduler is not None else None,
             "disable_confidence_filter": args.disable_confidence_filter,
             "disable_curriculum": args.disable_curriculum,
             "teacher_params": teacher_params,

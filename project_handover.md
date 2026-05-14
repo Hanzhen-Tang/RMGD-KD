@@ -1,6 +1,6 @@
 # CCKD Paper Handover - Current State
 
-Last updated: 2026-04-29
+Last updated: 2026-05-14
 
 This document is the quick handover file for a future model or a new account with no chat memory. Read this file first. The longer file `docs/project_full_memory.md` contains historical development notes, including abandoned versions, so its older sections must not override this current-state handover.
 
@@ -41,11 +41,19 @@ Additional v6 generalization students:
 - Added only for teacher-student generalization experiments.
 - They are not meant to replace the main GCN student in the core paper story.
 
+Additional v7 generalization students:
+
+- `STID-style MLP Student`
+- `DLinear Student`
+- Added to broaden the lightweight student family beyond graph, temporal-convolution, and recurrent students.
+- Use them as generalization/transferability evidence, not as replacements for the main GCN student.
+
 Training framework:
 
 - Historical traffic sequence is fed to both teacher and student.
 - Teacher and student forecasts are used by the confidence-adaptive dual-path distillation module.
 - Distillation losses are further adjusted by the soft curriculum weighting module over forecasting horizons.
+- v7 可选启用 DDASC 动态难度感知软课程，对应参数为 `--curriculum_mode dynamic_soft`。
 - Ground-truth labels provide hard supervision.
 - Total loss trains the student.
 
@@ -109,11 +117,15 @@ Important distinction:
 
 Implementation warning:
 
-- Current code supports `curriculum_mode` values: `standard`, `short`, `wide`, and `soft`.
+- Current code supports `curriculum_mode` values: `standard`, `short`, `wide`, `soft`, and `dynamic_soft`.
 - Current training script default is `standard`.
 - `standard`, `short`, and `wide` contain hard horizon opening behavior.
 - If the final paper claims that all horizons are always active, final experiments should use `--curriculum_mode soft` or the code should be adjusted to match the paper.
 - v6 fixed the `soft` weight direction so short-term horizons are emphasized early and long-term weights gradually increase.
+- v7 保持所有旧模式不变，只新增显式启用的 `dynamic_soft` 模式。
+- 在 `dynamic_soft` 中，现有 `soft` curriculum 是权重下限；每轮验证后的 horizon 级信号会用于更新下一轮蒸馏权重。
+- DDASC 难度分数为 `D_h = 0.45 * E_h + 0.35 * G_h + 0.20 * (1 - C_h)`，其中 `E_h` 是学生验证 MAE，`G_h` 是师生预测差距，`C_h` 是教师 horizon 置信度。
+- DDASC 权重为 `m_h = b_h + 0.70 * (1 - b_h) * (1 - normalize(D_h))`，并使用 EMA 平滑、5 epoch warmup、`m_h >= b_h`、`m_h <= 1`、短期到长期单调不增等约束。
 
 ## 5. Formula Notes
 
@@ -233,13 +245,17 @@ Important files:
 - `losses/distillation.py`: current confidence, dual-path, and curriculum loss implementation.
 - `train_student_kd.py`: student distillation training entry.
 - `engine.py`: training loops and teacher/student prediction handling.
+- `utils/curriculum.py`: v7 DDASC 调度器和验证 horizon 信号统计工具。
 - `compare_teacher_student.py`: teacher/student prediction visualization.
 - `scripts/generate_distillation_heatmap.py`: teacher error and confidence heatmaps.
 - `scripts/benchmark_model.py`: parameter and inference speed benchmarking.
 - `scripts/plot_efficiency_tradeoff.py`: accuracy-efficiency figure support.
 - `models/student_tcn.py`: lightweight TCN student added for v6 generalization experiments.
 - `models/student_gru.py`: lightweight GRU student added for v6 generalization experiments.
+- `models/student_stid.py`: STID-style MLP student added for v7 generalization experiments.
+- `models/student_dlinear.py`: DLinear student added for v7 generalization experiments.
 - `v6_generalization_experiment.md`: root-level v6 change notes and runnable experiment commands.
+- `v7_dynamic_curriculum_experiment.md`: 根目录下的 v7 DDASC 中文实验流程和记录规范。
 - `docs/project_full_memory.md`: long historical memory; older sections may be outdated.
 - `docs/project_handover.md`: current quick handover; this file should be trusted first.
 
@@ -247,14 +263,14 @@ Important files:
 
 Recommended next steps:
 
-1. Run the 12 v6 TCN/GRU generalization experiments in `v6_generalization_experiment.md`.
-2. Align the paper formulas with `losses/distillation.py`.
-3. Update the GPT draft according to formula and curriculum corrections.
-4. Fill real results in the four required tables.
-5. Add the v6 generalization table if results support the claim.
-6. Finalize the four figures.
-7. Convert final equations into MathType.
-8. Replace citation placeholders with real references.
+1. 按 `v7_dynamic_curriculum_experiment.md` 跑 v7 DDASC 学生实验；教师 checkpoint 复用，不重跑教师。
+2. 将 v7 `dynamic_soft` 和已有或补跑的 v6/fixed `soft` 学生结果做直接对照。
+3. v6 TCN/GRU 泛化实验和 v7 DDASC 实验先分开管理，除非后续论文同时需要两部分。
+4. 按 `losses/distillation.py` 和 `utils/curriculum.py` 对齐论文公式。
+5. 根据置信度、趋势蒸馏和课程权重的最新实现更新论文初稿。
+6. 把真实实验结果填入表格，不要编造数值。
+7. 完成四张核心图；如果 v7 结果有效，可以额外加入 DDASC 权重演化图。
+8. 最终公式转成 MathType，并替换参考文献占位符。
 
 ## 11. v6 Latest Experiment Status
 
@@ -271,7 +287,9 @@ Implemented code support:
 
 - `models/student_tcn.py` adds `Lightweight TCN Student`.
 - `models/student_gru.py` adds `Lightweight GRU Student`.
-- `train_student_kd.py` supports `--student_model gcn|tcn|gru`.
+- `models/student_stid.py` adds `STID-style MLP Student`.
+- `models/student_dlinear.py` adds `DLinear Student`.
+- `train_student_kd.py` supports `--student_model gcn|tcn|gru|stid|dlinear`.
 - `test.py`, `scripts/benchmark_model.py`, `scripts/collect_results.py`, and related utilities can rebuild the correct student architecture from checkpoint metadata.
 - Root document `v6_generalization_experiment.md` records the runnable training and testing commands.
 
@@ -296,8 +314,33 @@ Still pending:
 - Complete TCN/GRU runs on `PEMS-BAY`.
 - Decide whether the generalization table should enter the main paper, appendix, or be omitted depending on results.
 
-## 12. Resume Prompt for a New Model
+## 12. v7 动态课程当前状态
+
+目的：
+
+- v7 为主线 GCN 学生蒸馏阶段新增 DDASC 动态难度感知软课程。
+- 它针对不同预测步的难度差异做动态调整：短期 horizon 通常更稳定，长期 horizon 更不确定，但所有 horizon 都保持参与训练。
+- 当前 `soft` curriculum 作为固定基线和权重下限；`dynamic_soft` 只会在这个下限之上，根据验证信号提高下一轮蒸馏权重。
+
+已实现代码支持：
+
+- `utils/curriculum.py` 包含 `DynamicCurriculumScheduler`、fixed soft 基础权重、horizon 级验证信号统计和 DDASC 状态保存。
+- `losses/distillation.py` 支持可选的 `curriculum_override`；不传 override 时，所有旧课程模式保持原行为。
+- `engine.py` 会把当前 epoch 的动态权重传给蒸馏损失。
+- `train_student_kd.py` 支持 `--curriculum_mode dynamic_soft`，并新增 `alpha`、`beta`、`gamma`、`eta`、`ema`、`warmup` 等动态课程参数。
+- 训练 history 会记录当前权重、基础权重、下一轮权重、horizon MAE、师生差距、教师置信度、difficulty、readiness 和有效样本数。
+- checkpoint 会保存 DDASC 配置和最终调度器状态，便于复现实验。
+
+实验规则：
+
+- 教师 checkpoint 继续复用：`checkpoints/teacher/metr_teacher_best.pt` 和 `checkpoints/teacher/bay_teacher_best.pt`。
+- 除非教师结构或教师训练流程发生变化，否则 v7 不需要重新训练教师。
+- v7 主实验命名建议使用 `metr_student_gcn_cckd_v7_ddasc` 和 `bay_student_gcn_cckd_v7_ddasc`。
+- fixed soft 直接对照命名建议使用 `*_v6_soft` 或 `*_fixed_soft`，不要和 v7 混名。
+- 如果只能先跑一个新实验，优先跑完整学生方法的 `--curriculum_mode dynamic_soft`。
+
+## 13. Resume Prompt for a New Model
 
 Use this prompt if context is lost:
 
-`This is a Chinese academic paper project on CCKD for lightweight traffic forecasting. The current method uses a GWNet teacher and a lightweight GCN student. The main contributions are confidence-adaptive dual-path distillation and soft curriculum weighting over forecasting horizons. Confidence is continuous soft routing, not a hard 0.5 threshold: absolute-value distillation is weighted by confidence and trend distillation by complementary low confidence. Low-confidence teacher knowledge is not discarded. The final deployed model is only the lightweight student. Read docs/project_handover.md first; use docs/project_full_memory.md only as historical context because older sections contain abandoned RMGD-KD/v3/v4 notes. Before writing or editing the paper, align formulas with losses/distillation.py, especially confidence calculation, adjacent-horizon trend weighting, and curriculum mode.`
+`This is a Chinese academic paper project on CCKD for lightweight traffic forecasting. The current method uses a GWNet teacher and a lightweight GCN student. The main contributions are confidence-adaptive dual-path distillation and soft curriculum weighting over forecasting horizons. v7 adds optional DDASC dynamic soft curriculum with --curriculum_mode dynamic_soft; it reuses teacher checkpoints and only reruns student distillation experiments. Confidence is continuous soft routing, not a hard 0.5 threshold: absolute-value distillation is weighted by confidence and trend distillation by complementary low confidence. Low-confidence teacher knowledge is not discarded. The final deployed model is only the lightweight student. Read docs/project_handover.md first, then v7_dynamic_curriculum_experiment.md for v7 commands; use docs/project_full_memory.md only as historical context because older sections contain abandoned RMGD-KD/v3/v4 notes. Before writing or editing the paper, align formulas with losses/distillation.py and utils/curriculum.py, especially confidence calculation, adjacent-horizon trend weighting, and curriculum mode.`

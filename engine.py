@@ -101,6 +101,7 @@ class DistillationTrainer:
         self.clip = clip
         self.current_epoch = 1
         self.total_epochs = 1
+        self.curriculum_override = None
         self.use_feature_alignment = feature_weight > 0.0 or relation_weight > 0.0
 
         self.distill_loss = RegressionDistillationLoss(
@@ -138,6 +139,9 @@ class DistillationTrainer:
         self.current_epoch = current_epoch
         self.total_epochs = max(total_epochs, 1)
 
+    def set_curriculum_override(self, curriculum_override):
+        self.curriculum_override = curriculum_override
+
     def _shared_step(self, inputs, targets, training: bool):
         if training:
             self.student_model.train()
@@ -173,6 +177,7 @@ class DistillationTrainer:
             current_epoch=self.current_epoch,
             total_epochs=self.total_epochs,
             null_val=0.0,
+            curriculum_override=self.curriculum_override,
         )
 
         if training:

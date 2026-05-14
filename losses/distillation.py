@@ -84,6 +84,7 @@ def compute_curriculum_map(
     - short: short warm-up then fully open
     - wide: expose more horizons early
     - soft: all horizons active, but long horizons start with smaller weights
+    - dynamic_soft: soft fallback used until an external dynamic map is supplied
     """
     progress = 1.0 if total_epochs <= 0 else current_epoch / total_epochs
     curriculum_map = torch.ones((1, 1, 1, horizon_count), device=device)
@@ -111,7 +112,7 @@ def compute_curriculum_map(
             curriculum_map[..., :visible_horizon] = 1.0
         else:
             visible_horizon = horizon_count
-    elif mode == "soft":
+    elif mode in {"soft", "dynamic_soft"}:
         visible_horizon = horizon_count
         if progress <= 0.5:
             min_weight = 0.4 + 0.6 * (progress / 0.5)
@@ -184,6 +185,7 @@ class RegressionDistillationLoss(nn.Module):
         current_epoch,
         total_epochs,
         null_val=0.0,
+        curriculum_override=None,
     ):
         hard_loss = masked_mae(student_pred, real_value, null_val)
         valid_mask = _build_valid_mask(real_value, null_val=null_val)
@@ -201,13 +203,27 @@ class RegressionDistillationLoss(nn.Module):
             confidence_score = valid_mask
 
         if self.enable_curriculum:
-            curriculum_map, visible_horizon = compute_curriculum_map(
-                horizon_count=student_pred.size(-1),
-                current_epoch=current_epoch,
-                total_epochs=total_epochs,
-                device=student_pred.device,
-                mode=self.curriculum_mode,
-            )
+            if curriculum_override is not None:
+                curriculum_weights = torch.as_tensor(
+                    curriculum_override,
+                    dtype=student_pred.dtype,
+                    device=student_pred.device,
+                ).view(-1)
+                if curriculum_weights.numel() != student_pred.size(-1):
+                    raise ValueError(
+                        f"curriculum_override length {curriculum_weights.numel()} "
+                        f"does not match horizon count {student_pred.size(-1)}"
+                    )
+                curriculum_map = curriculum_weights.view(1, 1, 1, student_pred.size(-1))
+                visible_horizon = student_pred.size(-1)
+            else:
+                curriculum_map, visible_horizon = compute_curriculum_map(
+                    horizon_count=student_pred.size(-1),
+                    current_epoch=current_epoch,
+                    total_epochs=total_epochs,
+                    device=student_pred.device,
+                    mode=self.curriculum_mode,
+                )
         else:
             curriculum_map = torch.ones((1, 1, 1, student_pred.size(-1)), device=student_pred.device)
             visible_horizon = student_pred.size(-1)
@@ -288,4 +304,7 @@ class RegressionDistillationLoss(nn.Module):
             "confidence_enabled": int(self.enable_confidence_filter),
             "curriculum_enabled": int(self.enable_curriculum),
             "curriculum_mode": self.curriculum_mode,
+            "curriculum_min_weight": curriculum_map.min().item(),
+            "curriculum_mean_weight": curriculum_map.mean().item(),
+            "curriculum_max_weight": curriculum_map.max().item(),
         }

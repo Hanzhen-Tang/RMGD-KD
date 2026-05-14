@@ -1,10 +1,12 @@
 from models.student_gcn import SimpleGCNStudent
 from models.student_gru import SimpleGRUStudent
+from models.student_dlinear import SimpleDLinearStudent
+from models.student_stid import SimpleSTIDStudent
 from models.student_tcn import SimpleTCNStudent
 from models.teacher_gwnet import GWNetTeacher
 
 
-STUDENT_MODEL_CHOICES = ("gcn", "tcn", "gru")
+STUDENT_MODEL_CHOICES = ("gcn", "tcn", "gru", "stid", "dlinear")
 
 
 def build_student_model(
@@ -52,6 +54,25 @@ def build_student_model(
             recurrent_layers=graph_layers,
             input_seq_len=input_seq_len,
         )
+    if student_model == "stid":
+        return SimpleSTIDStudent(
+            num_nodes=num_nodes,
+            in_dim=in_dim,
+            hidden_dim=hidden_dim,
+            out_dim=out_dim,
+            dropout=dropout,
+            mlp_layers=graph_layers,
+            input_seq_len=input_seq_len,
+        )
+    if student_model == "dlinear":
+        return SimpleDLinearStudent(
+            num_nodes=num_nodes,
+            in_dim=in_dim,
+            hidden_dim=hidden_dim,
+            out_dim=out_dim,
+            dropout=dropout,
+            input_seq_len=input_seq_len,
+        )
     raise ValueError(f"Unsupported student_model: {student_model}")
 
 
@@ -73,8 +94,10 @@ def build_student_from_checkpoint(ckpt, supports, device):
 
 __all__ = [
     "GWNetTeacher",
+    "SimpleDLinearStudent",
     "SimpleGCNStudent",
     "SimpleGRUStudent",
+    "SimpleSTIDStudent",
     "SimpleTCNStudent",
     "STUDENT_MODEL_CHOICES",
     "build_student_model",

@@ -274,6 +274,8 @@ python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/a
 python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_gru_baseline_v6_best.pt --model_type student --exp_name bay_student_gru_baseline_v6_eval
 python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_gru_vanilla_kd_v6_best.pt --model_type student --exp_name bay_student_gru_vanilla_kd_v6_eval
 python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/bay_student_gru_cckd_v6_soft_best.pt --model_type student --exp_name bay_student_gru_cckd_v6_soft_eval
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_best.pt --epochs 1 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode dynamic_soft --exp_name smoke_metr_v7_ddasc
+
 ```
 
 ## 9. 第 5 步：汇总泛化实验结果表
