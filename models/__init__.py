@@ -4,3 +4,4 @@ from .student_dlinear import SimpleDLinearStudent
 from .student_stid import SimpleSTIDStudent
 from .student_tcn import SimpleTCNStudent
 from .teacher_gwnet import GWNetTeacher
+from .teacher_staeformer import STAEformerTeacher

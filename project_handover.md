@@ -1,6 +1,6 @@
 # CCKD Paper Handover - Current State
 
-Last updated: 2026-05-14
+Last updated: 2026-05-25
 
 This document is the quick handover file for a future model or a new account with no chat memory. Read this file first. The longer file `docs/project_full_memory.md` contains historical development notes, including abandoned versions, so its older sections must not override this current-state handover.
 
@@ -27,6 +27,9 @@ Teacher:
 
 - `GWNet Teacher`
 - Provides stronger spatiotemporal forecasting knowledge during training.
+- `STAEformer Teacher`
+- Added as an alternative teacher for teacher-side generalization and GCN-student ablation experiments.
+- It should be treated as an additional experimental teacher, not an automatic replacement for the main GWNet teacher story.
 
 Student:
 
@@ -51,6 +54,7 @@ Additional v7 generalization students:
 Training framework:
 
 - Historical traffic sequence is fed to both teacher and student.
+- Teacher checkpoints now carry teacher metadata; old checkpoints without `teacher_model` default to `gwnet`.
 - Teacher and student forecasts are used by the confidence-adaptive dual-path distillation module.
 - Distillation losses are further adjusted by the soft curriculum weighting module over forecasting horizons.
 - v7 可选启用 DDASC 动态难度感知软课程，对应参数为 `--curriculum_mode dynamic_soft`。
@@ -215,6 +219,14 @@ Generalization experiment suggested by the advisor:
 - This requires 6 new training runs.
 - Do not expand to unrelated domains such as image classification unless the project scope changes.
 
+Teacher-side generalization experiment:
+
+- v2026-05-25 added `STAEformer Teacher` support.
+- Purpose: test whether CCKD still improves the main `Lightweight GCN Student` when the teacher changes from GWNet to STAEformer.
+- Recommended comparison: `STAEformer Teacher`, `GCN Vanilla KD`, `GCN w/o confidence-adaptive distillation`, `GCN w/o soft curriculum`, and `GCN CCKD`.
+- Treat this as an additional teacher-student generalization / ablation table, not a replacement for the main GWNet-based story unless the final results clearly support it.
+- Full command workflow is in `staeformer_teacher_workflow.md`.
+
 ## 8. Paper Draft Status
 
 The GPT-generated draft `CCKD_中文学术论文初稿_带引用占位符.doc/.docx` was reviewed.
@@ -243,9 +255,12 @@ Important files:
 
 - `README.md`: project usage overview, but verify it does not still expose paper-facing version names.
 - `losses/distillation.py`: current confidence, dual-path, and curriculum loss implementation.
+- `train.py`: teacher training entry; supports `--teacher_model gwnet|staeformer`.
 - `train_student_kd.py`: student distillation training entry.
 - `engine.py`: training loops and teacher/student prediction handling.
 - `utils/curriculum.py`: v7 DDASC 调度器和验证 horizon 信号统计工具。
+- `model.py`: unified teacher/student registry; old GWNet checkpoints default to `teacher_model=gwnet`.
+- `models/teacher_staeformer.py`: STAEformer Teacher added for teacher-side generalization experiments.
 - `compare_teacher_student.py`: teacher/student prediction visualization.
 - `scripts/generate_distillation_heatmap.py`: teacher error and confidence heatmaps.
 - `scripts/benchmark_model.py`: parameter and inference speed benchmarking.
@@ -256,21 +271,23 @@ Important files:
 - `models/student_dlinear.py`: DLinear student added for v7 generalization experiments.
 - `v6_generalization_experiment.md`: root-level v6 change notes and runnable experiment commands.
 - `v7_dynamic_curriculum_experiment.md`: 根目录下的 v7 DDASC 中文实验流程和记录规范。
+- `staeformer_teacher_workflow.md`: STAEformer Teacher 接入说明、教师训练命令、泛化学生 Vanilla/CCKD 命令、新教师+GCN 消融命令。
 - `docs/project_full_memory.md`: long historical memory; older sections may be outdated.
-- `docs/project_handover.md`: current quick handover; this file should be trusted first.
+- `project_handover.md`: current quick handover; this file should be trusted first.
 
 ## 10. Immediate Next Steps
 
 Recommended next steps:
 
-1. 按 `v7_dynamic_curriculum_experiment.md` 跑 v7 DDASC 学生实验；教师 checkpoint 复用，不重跑教师。
-2. 将 v7 `dynamic_soft` 和已有或补跑的 v6/fixed `soft` 学生结果做直接对照。
-3. v6 TCN/GRU 泛化实验和 v7 DDASC 实验先分开管理，除非后续论文同时需要两部分。
-4. 按 `losses/distillation.py` 和 `utils/curriculum.py` 对齐论文公式。
-5. 根据置信度、趋势蒸馏和课程权重的最新实现更新论文初稿。
-6. 把真实实验结果填入表格，不要编造数值。
-7. 完成四张核心图；如果 v7 结果有效，可以额外加入 DDASC 权重演化图。
-8. 最终公式转成 MathType，并替换参考文献占位符。
+1. 如果要做新教师实验，先按 `staeformer_teacher_workflow.md` 训练并测试 `metr_teacher_staeformer_wf` 和 `bay_teacher_staeformer_wf`。
+2. 使用 STAEformer Teacher checkpoint 跑 GCN 学生消融：Vanilla KD、w/o confidence、w/o curriculum、full CCKD。
+3. 泛化学生 TCN/GRU/STID/DLinear 的 Vanilla KD 与 CCKD 仍可继续使用 GWNet Teacher，避免和新教师实验混在同一张主表里。
+4. 按 `v7_dynamic_curriculum_experiment.md` 跑 v7 DDASC 学生实验；除非教师结构变化，否则教师 checkpoint 复用。
+5. 将 `dynamic_soft`、fixed `soft`、Vanilla KD、消融实验做直接对照。
+6. 按 `losses/distillation.py`、`utils/curriculum.py`、`models/teacher_staeformer.py` 对齐论文公式和实验描述。
+7. 把真实实验结果填入表格，不要编造数值。
+8. 完成四张核心图；如果 v7 或 STAEformer 教师实验有效，可以额外加入 DDASC 权重演化图或 teacher-side generalization table。
+9. 最终公式转成 MathType，并替换参考文献占位符。
 
 ## 11. v6 Latest Experiment Status
 
@@ -339,8 +356,31 @@ Still pending:
 - fixed soft 直接对照命名建议使用 `*_v6_soft` 或 `*_fixed_soft`，不要和 v7 混名。
 - 如果只能先跑一个新实验，优先跑完整学生方法的 `--curriculum_mode dynamic_soft`。
 
-## 13. Resume Prompt for a New Model
+## 13. STAEformer Teacher 当前状态
+
+Purpose:
+
+- Add another stronger teacher candidate for teacher-side generalization.
+- Keep the final deployed model as the lightweight student.
+- Main use case: `STAEformer Teacher -> Lightweight GCN Student` ablation.
+
+Implemented code support:
+
+- `models/teacher_staeformer.py` implements a compact STAEformer-style teacher with input/time/adaptive embeddings, temporal attention, spatial attention, and multi-horizon projection.
+- `model.py` supports `TEACHER_MODEL_CHOICES = ("gwnet", "staeformer")`.
+- `train.py` supports `--teacher_model staeformer` and saves STAEformer architecture metadata in checkpoints.
+- `train_student_kd.py`, `test.py`, `scripts/collect_results.py`, `scripts/benchmark_model.py`, `compare_teacher_student.py`, and `scripts/generate_distillation_heatmap.py` can rebuild teacher checkpoints through unified metadata.
+- Old GWNet checkpoints remain compatible because missing `teacher_model` defaults to `gwnet`.
+- `scripts/sanity_check.py` verifies both GWNet Teacher and STAEformer Teacher output `[B, H, N, 1]`.
+
+Experiment safety:
+
+- No existing experiment checkpoint should be overwritten by default.
+- Use the `_wf` experiment names in `staeformer_teacher_workflow.md` unless intentionally replacing a previous run.
+- Do not mix GWNet-teacher and STAEformer-teacher student results in the same table without clearly marking the teacher.
+
+## 14. Resume Prompt for a New Model
 
 Use this prompt if context is lost:
 
-`This is a Chinese academic paper project on CCKD for lightweight traffic forecasting. The current method uses a GWNet teacher and a lightweight GCN student. The main contributions are confidence-adaptive dual-path distillation and soft curriculum weighting over forecasting horizons. v7 adds optional DDASC dynamic soft curriculum with --curriculum_mode dynamic_soft; it reuses teacher checkpoints and only reruns student distillation experiments. Confidence is continuous soft routing, not a hard 0.5 threshold: absolute-value distillation is weighted by confidence and trend distillation by complementary low confidence. Low-confidence teacher knowledge is not discarded. The final deployed model is only the lightweight student. Read docs/project_handover.md first, then v7_dynamic_curriculum_experiment.md for v7 commands; use docs/project_full_memory.md only as historical context because older sections contain abandoned RMGD-KD/v3/v4 notes. Before writing or editing the paper, align formulas with losses/distillation.py and utils/curriculum.py, especially confidence calculation, adjacent-horizon trend weighting, and curriculum mode.`
+`This is a Chinese academic paper project on CCKD for lightweight traffic forecasting. The current main story uses a GWNet teacher and a lightweight GCN student, while STAEformer Teacher has also been added for teacher-side generalization / ablation experiments. The main contributions are confidence-adaptive dual-path distillation and soft curriculum weighting over forecasting horizons. v7 adds optional DDASC dynamic soft curriculum with --curriculum_mode dynamic_soft. Confidence is continuous soft routing, not a hard 0.5 threshold: absolute-value distillation is weighted by confidence and trend distillation by complementary low confidence. Low-confidence teacher knowledge is not discarded. The final deployed model is only the lightweight student. Read project_handover.md first, then cckd_method_full_summary.md, v7_dynamic_curriculum_experiment.md, and staeformer_teacher_workflow.md for commands. Use docs/project_full_memory.md only as historical context because older sections contain abandoned RMGD-KD/v3/v4 notes. Before writing or editing the paper, align formulas with losses/distillation.py, utils/curriculum.py, and the selected teacher checkpoint metadata.`

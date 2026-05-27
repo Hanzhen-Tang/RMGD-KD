@@ -8,7 +8,7 @@ import torch
 
 import util
 from engine import DistillationTrainer, count_parameters, prepare_batch
-from model import GWNetTeacher, STUDENT_MODEL_CHOICES, build_student_model
+from model import STUDENT_MODEL_CHOICES, build_student_model, build_teacher_from_checkpoint
 from utils.curriculum import (
     DynamicCurriculumConfig,
     DynamicCurriculumScheduler,
@@ -88,27 +88,6 @@ def to_float_list(values):
     return np.asarray(values, dtype=float).tolist()
 
 
-def build_teacher_from_checkpoint(ckpt, device, supports):
-    teacher_supports = None if ckpt.get("aptonly", False) else supports
-    teacher = GWNetTeacher(
-        device=device,
-        num_nodes=ckpt["num_nodes"],
-        dropout=ckpt["dropout"],
-        supports=teacher_supports,
-        gcn_bool=ckpt["gcn_bool"],
-        addaptadj=ckpt["addaptadj"],
-        aptinit=None if ckpt["randomadj"] or teacher_supports is None else teacher_supports[0],
-        in_dim=ckpt["in_dim"],
-        out_dim=ckpt["seq_length"],
-        residual_channels=ckpt["nhid"],
-        dilation_channels=ckpt["nhid"],
-        skip_channels=ckpt["nhid"] * 8,
-        end_channels=ckpt["nhid"] * 16,
-    ).to(device)
-    teacher.load_state_dict(ckpt["model_state_dict"])
-    return teacher
-
-
 def main():
     args = parse_args()
     set_seed(args.seed)
@@ -120,7 +99,8 @@ def main():
     supports = [torch.tensor(adj, dtype=torch.float32, device=device) for adj in adj_mx]
 
     teacher_ckpt = util.load_checkpoint(args.teacher_checkpoint, map_location=device)
-    teacher = build_teacher_from_checkpoint(teacher_ckpt, device, supports)
+    teacher = build_teacher_from_checkpoint(teacher_ckpt, supports, device)
+    teacher.load_state_dict(teacher_ckpt["model_state_dict"])
 
     num_nodes = dataloader["x_train"].shape[2]
     in_dim = dataloader["x_train"].shape[3]
@@ -385,6 +365,8 @@ def main():
             "seq_length": seq_length,
             "input_seq_len": input_seq_len,
             "student_model": args.student_model,
+            "teacher_model": teacher_ckpt.get("teacher_model", "gwnet"),
+            "teacher_checkpoint": args.teacher_checkpoint,
             "student_hidden_dim": args.student_hidden_dim,
             "student_layers": args.student_layers,
             "student_order": args.student_order,

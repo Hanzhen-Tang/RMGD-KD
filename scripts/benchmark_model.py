@@ -5,7 +5,7 @@ import torch
 
 import util
 from engine import count_parameters, prepare_batch
-from model import GWNetTeacher, build_student_from_checkpoint
+from model import build_student_from_checkpoint, build_teacher_from_checkpoint
 
 
 def parse_args():
@@ -24,22 +24,7 @@ def parse_args():
 
 def build_model(args, ckpt, device, supports):
     if args.model_type == "teacher":
-        teacher_supports = None if ckpt.get("aptonly", False) else supports
-        model = GWNetTeacher(
-            device=device,
-            num_nodes=ckpt["num_nodes"],
-            dropout=ckpt["dropout"],
-            supports=teacher_supports,
-            gcn_bool=ckpt["gcn_bool"],
-            addaptadj=ckpt["addaptadj"],
-            aptinit=None if ckpt["randomadj"] or teacher_supports is None else teacher_supports[0],
-            in_dim=ckpt["in_dim"],
-            out_dim=ckpt["seq_length"],
-            residual_channels=ckpt["nhid"],
-            dilation_channels=ckpt["nhid"],
-            skip_channels=ckpt["nhid"] * 8,
-            end_channels=ckpt["nhid"] * 16,
-        ).to(device)
+        model = build_teacher_from_checkpoint(ckpt, supports, device)
     else:
         model = build_student_from_checkpoint(ckpt, supports, device)
 
@@ -85,6 +70,8 @@ def main():
         latencies.append((time.perf_counter() - start) * 1000.0)
 
     print(f"model_type={args.model_type}")
+    if args.model_type == "teacher":
+        print(f"teacher_model={ckpt.get('teacher_model', 'gwnet')}")
     if args.model_type == "student":
         print(f"student_model={ckpt.get('student_model', 'gcn')}")
     print(f"params={params:,}")

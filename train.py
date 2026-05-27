@@ -8,21 +8,32 @@ import torch
 
 import util
 from engine import TeacherTrainer, prepare_batch
-from model import GWNetTeacher
+from model import TEACHER_MODEL_CHOICES, build_teacher_model
 from utils.plotting import plot_training_curves, save_history
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="训练 GWNet 教师模型。")
+    parser = argparse.ArgumentParser(description="训练教师模型。")
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--data", type=str, default="data/METR-LA")
     parser.add_argument("--adjdata", type=str, default="data/sensor_graph/adj_mx.pkl")
     parser.add_argument("--adjtype", type=str, default="doubletransition")
+    parser.add_argument("--teacher_model", type=str, default="gwnet", choices=TEACHER_MODEL_CHOICES)
     parser.add_argument("--gcn_bool", action="store_true")
     parser.add_argument("--aptonly", action="store_true")
     parser.add_argument("--addaptadj", action="store_true")
     parser.add_argument("--randomadj", action="store_true")
     parser.add_argument("--nhid", type=int, default=32)
+    parser.add_argument("--stae_steps_per_day", type=int, default=288)
+    parser.add_argument("--stae_input_embedding_dim", type=int, default=16)
+    parser.add_argument("--stae_tod_embedding_dim", type=int, default=16)
+    parser.add_argument("--stae_dow_embedding_dim", type=int, default=0)
+    parser.add_argument("--stae_spatial_embedding_dim", type=int, default=0)
+    parser.add_argument("--stae_adaptive_embedding_dim", type=int, default=32)
+    parser.add_argument("--stae_feed_forward_dim", type=int, default=128)
+    parser.add_argument("--stae_num_heads", type=int, default=4)
+    parser.add_argument("--stae_num_layers", type=int, default=2)
+    parser.add_argument("--disable_stae_mixed_proj", action="store_true")
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--learning_rate", type=float, default=0.001)
     parser.add_argument("--dropout", type=float, default=0.3)
@@ -59,26 +70,34 @@ def main():
     num_nodes = dataloader["x_train"].shape[2]
     in_dim = dataloader["x_train"].shape[3]
     seq_length = dataloader["y_train"].shape[1]
+    input_seq_len = dataloader["x_train"].shape[1]
 
-    if args.aptonly:
-        supports = None
-    adjinit = None if args.randomadj or supports is None else supports[0]
-
-    model = GWNetTeacher(
+    model = build_teacher_model(
+        teacher_model=args.teacher_model,
         device=device,
         num_nodes=num_nodes,
-        dropout=args.dropout,
-        supports=supports,
-        gcn_bool=args.gcn_bool,
-        addaptadj=args.addaptadj,
-        aptinit=adjinit,
         in_dim=in_dim,
         out_dim=seq_length,
-        residual_channels=args.nhid,
-        dilation_channels=args.nhid,
-        skip_channels=args.nhid * 8,
-        end_channels=args.nhid * 16,
-    ).to(device)
+        input_seq_len=input_seq_len,
+        dropout=args.dropout,
+        supports=supports,
+        adjtype=args.adjtype,
+        gcn_bool=args.gcn_bool,
+        aptonly=args.aptonly,
+        addaptadj=args.addaptadj,
+        randomadj=args.randomadj,
+        nhid=args.nhid,
+        stae_steps_per_day=args.stae_steps_per_day,
+        stae_input_embedding_dim=args.stae_input_embedding_dim,
+        stae_tod_embedding_dim=args.stae_tod_embedding_dim,
+        stae_dow_embedding_dim=args.stae_dow_embedding_dim,
+        stae_spatial_embedding_dim=args.stae_spatial_embedding_dim,
+        stae_adaptive_embedding_dim=args.stae_adaptive_embedding_dim,
+        stae_feed_forward_dim=args.stae_feed_forward_dim,
+        stae_num_heads=args.stae_num_heads,
+        stae_num_layers=args.stae_num_layers,
+        stae_use_mixed_proj=not args.disable_stae_mixed_proj,
+    )
 
     trainer = TeacherTrainer(
         model=model,
@@ -100,7 +119,10 @@ def main():
     best_state = None
     best_epoch = -1
 
-    print(f"教师训练开始: num_nodes={num_nodes}, in_dim={in_dim}, horizon={seq_length}, device={device}")
+    print(
+        f"教师训练开始: teacher_model={args.teacher_model}, num_nodes={num_nodes}, "
+        f"in_dim={in_dim}, input_len={input_seq_len}, horizon={seq_length}, device={device}"
+    )
     print(f"传感器数量: {len(sensor_ids)}, 映射大小: {len(sensor_id_to_ind)}")
 
     for epoch in range(1, args.epochs + 1):
@@ -118,7 +140,7 @@ def main():
             if batch_idx % args.print_every == 0 or batch_idx == 1:
                 print(
                     f"[Teacher][Epoch {epoch:03d}][Iter {batch_idx:03d}] "
-                    f"loss={metrics['loss']:.4f}, mape={metrics['mape']:.4f}, rmse={metrics['rmse']:.4f}"
+                    f"mae={metrics['mae']:.4f}, mape={metrics['mape']:.4f}, rmse={metrics['rmse']:.4f}"
                 )
 
         val_losses, val_mapes, val_rmses = [], [], []
@@ -145,7 +167,7 @@ def main():
 
         print(
             f"[Teacher][Epoch {epoch:03d}] "
-            f"train_loss={mean_train_loss:.4f}, val_loss={mean_val_loss:.4f}, "
+            f"train_mae={mean_train_loss:.4f}, val_mae={mean_val_loss:.4f}, "
             f"train_mape={mean_train_mape:.4f}, val_mape={mean_val_mape:.4f}, "
             f"time={time.time() - epoch_start:.2f}s"
         )
@@ -159,12 +181,14 @@ def main():
     torch.save(
         {
             "model_type": "teacher",
+            "teacher_model": args.teacher_model,
             "model_state_dict": best_state,
             "best_epoch": best_epoch,
             "best_val_loss": best_val_loss,
             "num_nodes": num_nodes,
             "in_dim": in_dim,
             "seq_length": seq_length,
+            "input_seq_len": input_seq_len,
             "nhid": args.nhid,
             "dropout": args.dropout,
             "adjtype": args.adjtype,
@@ -172,6 +196,16 @@ def main():
             "addaptadj": args.addaptadj,
             "aptonly": args.aptonly,
             "randomadj": args.randomadj,
+            "stae_steps_per_day": args.stae_steps_per_day,
+            "stae_input_embedding_dim": args.stae_input_embedding_dim,
+            "stae_tod_embedding_dim": args.stae_tod_embedding_dim,
+            "stae_dow_embedding_dim": args.stae_dow_embedding_dim,
+            "stae_spatial_embedding_dim": args.stae_spatial_embedding_dim,
+            "stae_adaptive_embedding_dim": args.stae_adaptive_embedding_dim,
+            "stae_feed_forward_dim": args.stae_feed_forward_dim,
+            "stae_num_heads": args.stae_num_heads,
+            "stae_num_layers": args.stae_num_layers,
+            "stae_use_mixed_proj": not args.disable_stae_mixed_proj,
             "scaler_mean": scaler.mean,
             "scaler_std": scaler.std,
         },
@@ -183,7 +217,7 @@ def main():
     save_history(history, report_path)
     plot_training_curves(history, figure_path)
 
-    print(f"教师模型训练结束，最优 epoch={best_epoch}, val_loss={best_val_loss:.4f}")
+    print(f"教师模型训练结束，最优 epoch={best_epoch}, val_mae={best_val_loss:.4f}")
     print(f"模型已保存到: {checkpoint_path}")
     print(f"训练曲线已保存到: {figure_path}")
 

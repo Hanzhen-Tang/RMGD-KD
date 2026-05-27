@@ -11,7 +11,7 @@ import torch
 
 import util
 from engine import prepare_batch
-from model import GWNetTeacher, build_student_from_checkpoint
+from model import build_student_from_checkpoint, build_teacher_from_checkpoint
 
 PAPER_REAL_COLOR = "#4D4D4D"
 PAPER_TEACHER_COLOR = "#0072B2"
@@ -40,22 +40,7 @@ def ensure_dir(path: str):
 
 
 def build_teacher(ckpt, device, supports):
-    teacher_supports = None if ckpt.get("aptonly", False) else supports
-    model = GWNetTeacher(
-        device=device,
-        num_nodes=ckpt["num_nodes"],
-        dropout=ckpt["dropout"],
-        supports=teacher_supports,
-        gcn_bool=ckpt["gcn_bool"],
-        addaptadj=ckpt["addaptadj"],
-        aptinit=None if ckpt["randomadj"] or teacher_supports is None else teacher_supports[0],
-        in_dim=ckpt["in_dim"],
-        out_dim=ckpt["seq_length"],
-        residual_channels=ckpt["nhid"],
-        dilation_channels=ckpt["nhid"],
-        skip_channels=ckpt["nhid"] * 8,
-        end_channels=ckpt["nhid"] * 16,
-    ).to(device)
+    model = build_teacher_from_checkpoint(ckpt, supports, device)
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
     return model

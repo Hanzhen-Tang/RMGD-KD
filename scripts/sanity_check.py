@@ -7,6 +7,7 @@ from model import (
     SimpleGRUStudent,
     SimpleSTIDStudent,
     SimpleTCNStudent,
+    STAEformerTeacher,
 )
 
 
@@ -27,6 +28,18 @@ def main():
         addaptadj=True,
         in_dim=in_dim,
         out_dim=horizon,
+    )
+    stae_teacher = STAEformerTeacher(
+        num_nodes=num_nodes,
+        in_dim=in_dim,
+        input_seq_len=input_len,
+        out_dim=horizon,
+        input_embedding_dim=8,
+        tod_embedding_dim=8,
+        adaptive_embedding_dim=16,
+        feed_forward_dim=32,
+        num_heads=4,
+        num_layers=1,
     )
     gcn_student = SimpleGCNStudent(
         num_nodes=num_nodes,
@@ -69,7 +82,9 @@ def main():
     )
 
     x = torch.randn(batch_size, in_dim, num_nodes, input_len)
+    x[:, 1, :, :] = torch.rand(batch_size, num_nodes, input_len)
     teacher_out = teacher(torch.nn.functional.pad(x, (1, 0, 0, 0)), return_features=True)
+    stae_teacher_out = stae_teacher(torch.nn.functional.pad(x, (1, 0, 0, 0)), return_features=True)
     gcn_out = gcn_student(x, supports, return_features=True)
     tcn_out = tcn_student(x, supports, return_features=True)
     gru_out = gru_student(x, supports, return_features=True)
@@ -77,12 +92,14 @@ def main():
     dlinear_out = dlinear_student(x, supports, return_features=True)
 
     assert teacher_out["prediction"].shape == (batch_size, horizon, num_nodes, 1)
+    assert stae_teacher_out["prediction"].shape == (batch_size, horizon, num_nodes, 1)
     assert gcn_out["prediction"].shape == (batch_size, horizon, num_nodes, 1)
     assert tcn_out["prediction"].shape == (batch_size, horizon, num_nodes, 1)
     assert gru_out["prediction"].shape == (batch_size, horizon, num_nodes, 1)
     assert stid_out["prediction"].shape == (batch_size, horizon, num_nodes, 1)
     assert dlinear_out["prediction"].shape == (batch_size, horizon, num_nodes, 1)
     assert teacher_out["hidden_state"].shape[0] == batch_size
+    assert stae_teacher_out["hidden_state"].shape[0] == batch_size
     assert gcn_out["hidden_state"].shape[0] == batch_size
     assert tcn_out["hidden_state"].shape[0] == batch_size
     assert gru_out["hidden_state"].shape[0] == batch_size
@@ -91,6 +108,7 @@ def main():
 
     print("Sanity check passed.")
     print(f"teacher prediction shape: {teacher_out['prediction'].shape}")
+    print(f"staeformer teacher prediction shape: {stae_teacher_out['prediction'].shape}")
     print(f"gcn student prediction shape: {gcn_out['prediction'].shape}")
     print(f"tcn student prediction shape: {tcn_out['prediction'].shape}")
     print(f"gru student prediction shape: {gru_out['prediction'].shape}")
