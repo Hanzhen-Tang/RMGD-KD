@@ -161,7 +161,11 @@ python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/a
 ```
 
 ### 5.7 METR-LA / DLinear Vanilla KD
+```bash
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_staeformer_wf_best.pt --student_model dlinear --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_metr_student_dlinear_vanilla_stae
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_staeformer_wf_best.pt --student_model dlinear --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 80 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --save_dir checkpoints/student --seed 42 --exp_name v8_metr_student_dlinear_cckd_stae
 
+```
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_staeformer_wf_best.pt --student_model dlinear --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_metr_student_dlinear_vanilla_stae
 ```
@@ -181,7 +185,10 @@ python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/a
 ```
 
 ### 5.9 PEMS-BAY / TCN Vanilla KD
-
+```bash
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model tcn --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_tcn_vanilla_stae
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model tcn --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 80 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_tcn_cckd_stae
+```
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model tcn --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_tcn_vanilla_stae
 ```
@@ -201,7 +208,10 @@ python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/
 ```
 
 ### 5.11 PEMS-BAY / GRU Vanilla KD
-
+```bash
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model gru --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_gru_vanilla_stae
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model gru --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 80 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_gru_cckd_stae
+```
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model gru --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_gru_vanilla_stae
 ```
@@ -221,7 +231,10 @@ python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/
 ```
 
 ### 5.13 PEMS-BAY / STID Vanilla KD
-
+```bash
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model stid --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_stid_vanilla_stae
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model stid --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 80 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_stid_cckd_stae
+```
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model stid --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_stid_vanilla_stae
 ```
@@ -241,7 +254,11 @@ python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/
 ```
 
 ### 5.15 PEMS-BAY / DLinear Vanilla KD
+```bash
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model dlinear --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_dlinear_vanilla_stae
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model dlinear --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_dlinear_cckd_stae
 
+```
 ```powershell
 python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --student_model dlinear --student_hidden_dim 32 --student_layers 2 --dropout 0.3 --epochs 50 --batch_size 64 --learning_rate 0.001 --weight_decay 0.0001 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_confidence_filter --disable_curriculum --save_dir checkpoints/student --seed 42 --exp_name v8_bay_student_dlinear_vanilla_stae
 ```
@@ -365,8 +382,34 @@ python -m scripts.collect_results --data data/PEMS-BAY --adjdata data/sensor_gra
 - STAEformer Teacher 的 checkpoint 训练完成后，学生蒸馏入口会自动根据 checkpoint 中的 `teacher_model=staeformer` 重建教师，无需额外参数。
 - 如果使用 `python train.py --help` 在 Windows 上遇到编码显示问题，先确认当前终端已经进入你自己选择的环境；这不是训练代码错误。
 - 本文档命令仅给出流程，不代表已经跑完对应实验。填论文结果前必须用 `test.py` 或 `scripts.collect_results.py` 重新确认真实指标。
+消融实验 w/o Confidence & Trend，只保留课程加权普通蒸馏
+```bash  忘改名字了 把GWnet的覆盖了
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_staeformer_wf_best.pt --epochs 70 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --disable_confidence_filter --curriculum_mode dynamic_soft --exp_name ablation_gcn_wo_conf_trend_metr
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --epochs 70 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --disable_confidence_filter --curriculum_mode dynamic_soft --exp_name ablation_gcn_wo_conf_trend_pems
+```
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/ablation_gcn_wo_conf_trend_metr_best.pt --model_type student --batch_size 64 --exp_name v8_STae_ablation_gcn_wo_conf_trend_metr
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/ablation_gcn_wo_conf_trend_pems_best.pt --model_type student --batch_size 64 --exp_name v8_STae_ablation_gcn_wo_conf_trend_pems
 
+消融实验 w/o Trend，只保留置信度数值蒸馏 + 动态课程
+```bash
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_staeformer_wf_best.pt --epochs 70 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode dynamic_soft --exp_name v8_ST_ablation_gcn_wo_trend_metr
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --epochs 70 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.0 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode dynamic_soft --exp_name v8_ST_ablation_gcn_wo_trend_pems
+```
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/v8_ST_ablation_gcn_wo_trend_metr_best.pt --model_type student --batch_size 64 --exp_name v8_ablation_gcn_wo_trend_metr
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/v8_ST_ablation_gcn_wo_trend_pems_best.pt --model_type student --batch_size 64 --exp_name v8_ablation_gcn_wo_trend_pems
 
+消融实验  w/o Curriculum保留置信度双路径蒸馏
+```bash
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_staeformer_wf_best.pt --epochs 70 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_curriculum --exp_name v8_ablation_gcn_wo_curriculum_metr
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --epochs 70 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --disable_curriculum --exp_name v8_ablation_gcn_wo_curriculum_pems
+```
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/v8_ablation_gcn_wo_curriculum_metr_best.pt --model_type student --batch_size 64 --exp_name v8_ablation_gcn_wo_curriculum_metr
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/v8_ablation_gcn_wo_curriculum_pems_best.pt --model_type student --batch_size 64 --exp_name v8_ablation_gcn_wo_curriculum_pems
 
-
-
+消融实验  CCKD fixed soft，去掉 v8 课程动态，只用固定 soft 课程
+```bash
+python train_student_kd.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/metr_teacher_staeformer_wf_best.pt --epochs 70 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name v8_ablation_gcn_fixed_soft_metr
+python train_student_kd.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --teacher_checkpoint checkpoints/teacher/bay_teacher_staeformer_wf_best.pt --epochs 70 --batch_size 64 --student_model gcn --student_hidden_dim 32 --student_layers 2 --hard_weight 0.7 --soft_weight 0.3 --trend_weight 0.5 --feature_weight 0.0 --relation_weight 0.0 --temperature 3.0 --confidence_power 1.0 --curriculum_mode soft --exp_name v8_ablation_gcn_fixed_soft_pems
+```
+python test.py --device cuda:0 --data data/METR-LA --adjdata data/sensor_graph/adj_mx.pkl --adjtype doubletransition --checkpoint checkpoints/student/v8_ablation_gcn_fixed_soft_metr_best.pt --model_type student --batch_size 64 --exp_name v8_ablation_gcn_fixed_soft_metr
+python test.py --device cuda:0 --data data/PEMS-BAY --adjdata data/sensor_graph/adj_mx_bay.pkl --adjtype doubletransition --checkpoint checkpoints/student/v8_ablation_gcn_fixed_soft_pems_best.pt --model_type student --batch_size 64 --exp_name v8_ablation_gcn_fixed_soft_pems
