@@ -1,6 +1,6 @@
 # CCKD Paper Handover - Current State
 
-Last updated: 2026-05-25
+Last updated: 2026-06-23
 
 This document is the quick handover file for a future model or a new account with no chat memory. Read this file first. The longer file `docs/project_full_memory.md` contains historical development notes, including abandoned versions, so its older sections must not override this current-state handover.
 
@@ -198,6 +198,26 @@ Recommended tables:
 - Optional Table 5: generalization across another lightweight student or teacher-student combination.
 - Optional Table 6: curriculum or hyperparameter sensitivity.
 
+Reproducibility and sensitivity experiments added on 2026-06-23:
+
+- The manuscript now mentions three random seeds and parameter sensitivity. Dedicated runnable automation has been added for both.
+- Three-seed stability should use independent student runs with the same CCKD settings and seeds such as `42 2024 3407`, then report test-set `mean ± std`.
+- Parameter sensitivity should change only one parameter at a time and keep all other main-experiment settings fixed.
+- Default sensitivity sweeps are:
+  - `hard_weight / soft_weight`: `0.9/0.1`, `0.8/0.2`, `0.7/0.3`, `0.6/0.4`, `0.5/0.5`.
+  - `trend_weight`: `0`, `0.25`, `0.50`, `0.75`, `1.00`.
+  - `dynamic_curriculum_eta`: `0`, `0.30`, `0.50`, `0.70`, `0.90`.
+- `dynamic_curriculum_eta` only has an effect under `--curriculum_mode dynamic_soft`; the new sensitivity runner automatically forces `dynamic_soft` for that sweep.
+- Use the generated CSV/Markdown outputs as the source for paper tables and sensitivity figures. Do not hand-copy terminal logs if a machine-readable report is available.
+
+Confidence effectiveness analysis added on 2026-06-23:
+
+- The paper also needs direct evidence that the constructed confidence scores reflect teacher supervision reliability.
+- Added a small diagnostic experiment that uses the training split to construct confidence scores and confidence bins, then reports teacher MAE on the test split for those fixed node-horizon bins.
+- The expected paper-facing interpretation is monotonic: higher confidence bins should have lower teacher MAE.
+- Default bins are `0%-33%`, `33%-66%`, and `66%-100%`.
+- This experiment is teacher-side diagnostics; it does not train a new student model.
+
 Main comparison interpretation:
 
 - Do not claim CCKD beats every heavy classical model.
@@ -265,6 +285,12 @@ Important files:
 - `scripts/generate_distillation_heatmap.py`: teacher error and confidence heatmaps.
 - `scripts/benchmark_model.py`: parameter and inference speed benchmarking.
 - `scripts/plot_efficiency_tradeoff.py`: accuracy-efficiency figure support.
+- `scripts/experiment_common.py`: shared helper for experiment runners; launches training commands, logs stdout, evaluates best checkpoints on the test set, and writes CSV/JSON/Markdown.
+- `scripts/run_seed_experiments.py`: three-random-seed stability experiment runner; default seeds are `42 2024 3407`.
+- `scripts/run_parameter_sensitivity_experiments.py`: parameter sensitivity runner for loss weights, trend weight, and DDASC/dynamic curriculum eta.
+- `docs/seed_and_parameter_sensitivity_experiments.md`: Chinese runnable guide for the two new experiment families.
+- `scripts/analyze_confidence_effectiveness.py`: confidence effectiveness analysis; bins node-horizon confidence scores and reports teacher MAE per bin.
+- `docs/confidence_effectiveness_analysis.md`: Chinese runnable guide and paper wording for the confidence effectiveness experiment.
 - `models/student_tcn.py`: lightweight TCN student added for v6 generalization experiments.
 - `models/student_gru.py`: lightweight GRU student added for v6 generalization experiments.
 - `models/student_stid.py`: STID-style MLP student added for v7 generalization experiments.
@@ -379,8 +405,83 @@ Experiment safety:
 - Use the `_wf` experiment names in `staeformer_teacher_workflow.md` unless intentionally replacing a previous run.
 - Do not mix GWNet-teacher and STAEformer-teacher student results in the same table without clearly marking the teacher.
 
-## 14. Resume Prompt for a New Model
+## 14. 2026-06-23 Seed and Parameter Sensitivity Automation
+
+Purpose:
+
+- Support the paper's added three-random-seed reliability claim and parameter sensitivity analysis with runnable, reproducible code.
+- Avoid manually copying metrics from `test.py` terminal output by evaluating each best checkpoint and writing structured reports.
+
+Added files:
+
+- `scripts/experiment_common.py`
+- `scripts/run_seed_experiments.py`
+- `scripts/run_parameter_sensitivity_experiments.py`
+- `docs/seed_and_parameter_sensitivity_experiments.md`
+
+Default output locations:
+
+- Seed runs: `outputs/reports/seed_experiments/cckd_seed_runs.csv`, `.json`, and `.md`.
+- Sensitivity runs: `outputs/reports/parameter_sensitivity/cckd_parameter_sensitivity_runs.csv`, `.json`, and `.md`.
+- Sensitivity figure source: `outputs/reports/figure_3_7_metr_parameter_sensitivity_source.csv`.
+- Logs: `logs/seed_experiments/*.log` and `logs/parameter_sensitivity/*.log`.
+
+Validation status:
+
+- The new Python files passed `python -m py_compile`.
+- `--help` works for both new runners.
+- `--dry_run` correctly expands training commands.
+- A specific `dynamic_eta` dry-run confirmed that the runner overrides `--curriculum_mode dynamic_soft` for that sweep.
+- Full training was not started during this update because the default shell Python lacked `numpy`; run the scripts in the project's normal PyTorch/numpy environment.
+
+Recommended official commands are in `docs/seed_and_parameter_sensitivity_experiments.md`.
+
+## 15. 2026-06-23 Confidence Effectiveness Analysis
+
+Purpose:
+
+- Provide direct evidence for the claim that the confidence score reflects teacher reliability.
+- This responds to the review concern that the paper should show confidence is correlated with teacher error, not only report final student MAE.
+
+Implemented code:
+
+- `scripts/analyze_confidence_effectiveness.py`
+- `docs/confidence_effectiveness_analysis.md`
+
+Default command:
+
+```powershell
+python scripts/analyze_confidence_effectiveness.py --device cuda:0 --batch_size 64 --confidence_split train --eval_split test
+```
+
+Default dataset specs:
+
+- `METR-LA,data/METR-LA,data/sensor_graph/adj_mx.pkl,checkpoints/teacher/metr_teacher_best.pt`
+- `PEMS-BAY,data/PEMS-BAY,data/sensor_graph/adj_mx_bay.pkl,checkpoints/teacher/bay_teacher_best.pt`
+
+Default output locations:
+
+- `outputs/reports/confidence_effectiveness/confidence_effectiveness_summary.csv`
+- `outputs/reports/confidence_effectiveness/confidence_effectiveness_summary.json`
+- `outputs/reports/confidence_effectiveness/confidence_effectiveness_summary.md`
+- `outputs/reports/confidence_effectiveness/confidence_effectiveness_node_horizon.csv`
+
+Method summary:
+
+- Run the teacher on the confidence split, which defaults to `train`.
+- Aggregate training-split teacher absolute error at node-horizon level.
+- Compute node confidence and horizon confidence with the same inverse-normalized error idea used by CCKD, then multiply them to obtain node-horizon confidence.
+- Sort all valid node-horizon cells by training-split confidence and split them into low/mid/high terciles.
+- Run the teacher on the evaluation split, which defaults to `test`, and report teacher MAE for the fixed training-confidence intervals.
+- This avoids a circular analysis where the same test errors both define and validate confidence.
+
+Validation status:
+
+- The script supports `--dry_run` and `--max_batches` for smoke testing.
+- Full results should be generated in the normal PyTorch/numpy environment before paper numbers are finalized.
+
+## 16. Resume Prompt for a New Model
 
 Use this prompt if context is lost:
 
-`This is a Chinese academic paper project on CCKD for lightweight traffic forecasting. The current main story uses a GWNet teacher and a lightweight GCN student, while STAEformer Teacher has also been added for teacher-side generalization / ablation experiments. The main contributions are confidence-adaptive dual-path distillation and soft curriculum weighting over forecasting horizons. v7 adds optional DDASC dynamic soft curriculum with --curriculum_mode dynamic_soft. Confidence is continuous soft routing, not a hard 0.5 threshold: absolute-value distillation is weighted by confidence and trend distillation by complementary low confidence. Low-confidence teacher knowledge is not discarded. The final deployed model is only the lightweight student. Read project_handover.md first, then cckd_method_full_summary.md, v7_dynamic_curriculum_experiment.md, and staeformer_teacher_workflow.md for commands. Use docs/project_full_memory.md only as historical context because older sections contain abandoned RMGD-KD/v3/v4 notes. Before writing or editing the paper, align formulas with losses/distillation.py, utils/curriculum.py, and the selected teacher checkpoint metadata.`
+`This is a Chinese academic paper project on CCKD for lightweight traffic forecasting. The current main story uses a GWNet teacher and a lightweight GCN student, while STAEformer Teacher has also been added for teacher-side generalization / ablation experiments. The main contributions are confidence-adaptive dual-path distillation and soft curriculum weighting over forecasting horizons. v7 adds optional DDASC dynamic soft curriculum with --curriculum_mode dynamic_soft. Confidence is continuous soft routing, not a hard 0.5 threshold: absolute-value distillation is weighted by confidence and trend distillation by complementary low confidence. Low-confidence teacher knowledge is not discarded. The final deployed model is only the lightweight student. The paper now also needs three-random-seed stability, parameter sensitivity, and confidence effectiveness evidence; use scripts/run_seed_experiments.py, scripts/run_parameter_sensitivity_experiments.py, scripts/analyze_confidence_effectiveness.py, docs/seed_and_parameter_sensitivity_experiments.md, and docs/confidence_effectiveness_analysis.md for those runs. Read project_handover.md first, then cckd_method_full_summary.md, v7_dynamic_curriculum_experiment.md, and staeformer_teacher_workflow.md for method and experiment context. Use docs/project_full_memory.md only as historical context because older sections contain abandoned RMGD-KD/v3/v4 notes. Before writing or editing the paper, align formulas with losses/distillation.py, utils/curriculum.py, and the selected teacher checkpoint metadata.`

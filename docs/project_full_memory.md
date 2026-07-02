@@ -1,6 +1,6 @@
 # Current State - Read This First
 
-Last updated: 2026-04-29
+Last updated: 2026-06-23
 
 This file is the long historical memory of the project. It contains older notes, including abandoned `RMGD-KD`, `v2`, `v3`, `v4`, and version-name discussions. A future model must not treat the early historical sections as the current method definition.
 
@@ -63,6 +63,31 @@ Current experiment/table plan:
 - Table 4: ablation study.
 - Optional Table 5: v6 advisor-suggested generalization experiment using `Lightweight TCN Student` and `Lightweight GRU Student`.
 - Optional Table 6: curriculum or hyperparameter sensitivity.
+
+Current 2026-06-23 experiment automation update:
+
+- The paper now needs three-random-seed stability results and parameter sensitivity results.
+- Added `scripts/experiment_common.py` as a shared helper for experiment runners. It launches training commands, logs stdout, evaluates best checkpoints on the test set, and writes CSV/JSON/Markdown reports.
+- Added `scripts/run_seed_experiments.py` for three-seed CCKD student training. Default seeds are `42 2024 3407`; output reports are written under `outputs/reports/seed_experiments/`.
+- Added `scripts/run_parameter_sensitivity_experiments.py` for one-variable-at-a-time sensitivity sweeps. Default sweeps cover `hard_weight/soft_weight`, `trend_weight`, and `dynamic_curriculum_eta`; output reports are written under `outputs/reports/parameter_sensitivity/`.
+- Added `docs/seed_and_parameter_sensitivity_experiments.md`, a Chinese runnable guide with formal commands, smoke-test commands, output paths, and PEMS-BAY variants.
+- The parameter sensitivity runner also writes `outputs/reports/figure_3_7_metr_parameter_sensitivity_source.csv` in the figure-source schema so real sweep results can replace earlier placeholder sensitivity values.
+- Important implementation note: `dynamic_curriculum_eta` only works when `--curriculum_mode dynamic_soft`; the new sensitivity runner automatically overrides the curriculum mode to `dynamic_soft` for the `dynamic_eta` sweep.
+- Validation done during this update: `python -m py_compile` passed, both new runners support `--help`, `--dry_run` expands the expected commands, and a `dynamic_eta` dry-run confirmed the `dynamic_soft` override.
+- Full training was not started in that update because the default shell Python lacked `numpy`; run the experiments in the project's normal PyTorch/numpy environment.
+
+Current 2026-06-23 confidence effectiveness analysis update:
+
+- Added a small diagnostic experiment to directly verify whether the CCKD confidence score reflects teacher supervision reliability.
+- Added `scripts/analyze_confidence_effectiveness.py`.
+- Added `docs/confidence_effectiveness_analysis.md`.
+- The corrected experiment uses `train` by default to construct confidence scores and low/mid/high confidence bins, then uses `test` by default only to evaluate teacher MAE under those fixed bins. This avoids using the same test errors to both define and validate confidence.
+- The experiment runs the main teacher checkpoint on the confidence split, aggregates teacher absolute error at node-horizon level, computes node-horizon confidence from inverse-normalized node and horizon errors, then divides all valid node-horizon cells into low/mid/high confidence terciles.
+- Default confidence intervals are `0%-33%`, `33%-66%`, and `66%-100%`.
+- Default outputs are under `outputs/reports/confidence_effectiveness/`, including `confidence_effectiveness_summary.md`, `.csv`, `.json`, and the node-horizon detail CSV.
+- Expected paper interpretation: if confidence is effective, teacher MAE should decrease from low-confidence to high-confidence bins.
+- Default command: `python scripts/analyze_confidence_effectiveness.py --device cuda:0 --batch_size 64 --confidence_split train --eval_split test`.
+- The script has `--dry_run` and `--max_batches` for smoke testing; full paper numbers still need to be generated in the normal PyTorch/numpy environment.
 
 Current v6 update:
 
